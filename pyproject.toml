@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "asax"
+version = "0.1.0"
+description = "ase + jax-md = asax"
+authors = ["Marcel Langer <me@sirmarcel.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.7"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
