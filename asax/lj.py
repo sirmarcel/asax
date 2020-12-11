@@ -4,6 +4,7 @@ from .utils import atoms_to_space
 
 
 class LennardJones(Calculator):
+    """Lennard-Jones Potential"""
 
     implemented_properties = [
         "energy",
@@ -18,12 +19,9 @@ class LennardJones(Calculator):
         Paramters:
             sigma: The potential minimum is at  2**(1/6) * sigma, default 1.0
             epsilon: The potential depth, default 1.0
-            rc: Cut-off for the NeighborList is set to 3 * sigma if None. Default None
-            ro: float, None
-              Onset of the cutoff function. Set to 0.8*rc if None.
-              Default None
-            x64: bool, False
-              Determine if double precision is used.
+            rc: Cut-off for the NeighborList is set to 3 * sigma if None, the default.
+            ro: Onset of the cutoff function. Set to 0.8*rc if None, the default.
+            x64: Determine if double precision is used. Default to True.
 
         """
 
