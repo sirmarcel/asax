@@ -7,7 +7,7 @@ class LennardJones(Calculator):
     implemented_properties = [
         "energy",
         "forces",
-        # "stress",
+        "stress",
         # "stresses",
         # "energies",
     ]
