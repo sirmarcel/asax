@@ -1,7 +1,5 @@
 from .calculator import Calculator
 
-from .utils import atoms_to_space
-
 
 class LennardJones(Calculator):
     """Lennard-Jones Potential"""
@@ -38,29 +36,17 @@ class LennardJones(Calculator):
             ro = 0.8 * self.rc
         self.ro = ro
 
-    def setup(self):
-        displacement, _, box = atoms_to_space(self.atoms)
-        self.energy, self.forces = get_lj(
-            displacement, self.epsilon, self.sigma, self.ro, self.rc, box, self.x64
-        )
+    def get_energy(self, displacement):
+        return get_lj(displacement, self.epsilon, self.sigma, self.ro, self.rc)
 
 
-def get_lj(displacement, epsilon, sigma, ro, rc, box, x64):
+def get_lj(displacement, epsilon, sigma, ro, rc):
     from jax_md import energy
-    from jax_md.quantity import force
-    from jax import jit
-    from jax.config import config
 
-    config.update("jax_enable_x64", x64)
-
-    energy_fn = energy.lennard_jones_pair(
+    return energy.lennard_jones_pair(
         displacement,
         sigma=sigma,
         epsilon=epsilon,
         r_onset=ro / sigma,
         r_cutoff=rc / sigma,
     )
-
-    force_fn = force(energy_fn)
-
-    return jit(energy_fn), jit(force_fn)
