@@ -2,17 +2,25 @@ def get_displacement(atoms):
     from jax_md import space
 
     if not all(atoms.get_pbc()):
-        displacement_fn, _ = space.free()
+        displacement, _ = space.free()
     else:
-        from ase.geometry.cell import crystal_structure_from_cell
-        assert crystal_structure_from_cell(cell) == "cubic"
+        cell = atoms.get_cell().array
+        inverse = space._small_inverse(cell)
 
-        cell = atoms.get_cell()
+        displacement_in_scaled_coordinates, _ = space.periodic_general(cell)
 
-        box = cell.lengths()[0]
-        displacement_fn, _ = space.periodic(side=box, wrapped=True)
+        # periodic_general works in scaled coordinates, but ase works in real space,
+        # so we define a custom displacement that maps automatically by multiplying
+        # the inverse unit cell matrix with the positions
+        def displacement(
+            Ra: space.Array, Rb: space.Array, **unused_kwargs
+        ) -> space.Array:
+            """Displacement that maps from real-space into scaled coordinates"""
+            return displacement_in_scaled_coordinates(
+                space.transform(inverse, Ra), space.transform(inverse, Rb)
+            )
 
-    return displacement_fn
+    return displacement
 
 
 def get_potential(energy):

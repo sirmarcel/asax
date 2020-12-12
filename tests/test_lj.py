@@ -33,10 +33,25 @@ class TestLennardJonesAgainstASE(TestCase, AllClose):
         )
         self.assertAllClose(self.a.get_forces(atoms), self.j.get_forces(atoms))
 
-    def test_solid(self):
+    def test_solid_cubic(self):
         from ase.build import bulk
 
         atoms = bulk("Ar", cubic=True) * [5, 5, 5]
+        atoms.set_cell(1.05 * atoms.get_cell(), scale_atoms=True)
+
+        print(atoms.get_cell())
+
+        self.assertAllClose(
+            self.a.get_potential_energy(atoms), self.j.get_potential_energy(atoms)
+        )
+        self.assertAllClose(
+            self.a.get_forces(atoms), self.j.get_forces(atoms), atol=1e-14
+        )
+
+    def test_solid_noncubic(self):
+        from ase.build import bulk
+
+        atoms = bulk("Ar", cubic=False) * [9, 9, 9]
         atoms.set_cell(1.05 * atoms.get_cell(), scale_atoms=True)
 
         print(atoms.get_cell())
