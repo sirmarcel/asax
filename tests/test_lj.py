@@ -11,14 +11,14 @@ class TestLennardJonesAgainstASE(TestCase, AllClose):
     def setUp(self):
         sigma = 2.0
         epsilon = 1.5
-        rc = 11.0
-        ro = 10.9
+        rc = 10.0
+        ro = 6.0
 
         self.j = jLJ(epsilon=epsilon, sigma=sigma, rc=rc, ro=ro, x64=True)
-        self.a = aLJ(epsilon=epsilon, sigma=sigma, rc=rc)
+        self.a = aLJ(epsilon=epsilon, sigma=sigma, rc=rc, ro=ro, smooth=True)
 
     def test_twobody(self):
-        atoms = Atoms(positions=[[0, 0, 0], [2, 0, 0]])
+        atoms = Atoms(positions=[[0, 0, 0], [8, 0, 0]])
 
         self.assertAllClose(
             self.a.get_potential_energy(atoms), self.j.get_potential_energy(atoms)
@@ -69,10 +69,10 @@ class TestLennardJonesAgainstASEWithStress(TestCase, AllClose):
         sigma = 2.0
         epsilon = 1.5
         rc = 11.0
-        ro = 10.9
+        ro = 6.0
 
         self.j = jLJ(epsilon=epsilon, sigma=sigma, rc=rc, ro=ro, x64=True, stress=True)
-        self.a = aLJ(epsilon=epsilon, sigma=sigma, rc=rc)
+        self.a = aLJ(epsilon=epsilon, sigma=sigma, rc=rc, ro=ro, smooth=True)
 
     def test_solid_cubic(self):
         from ase.build import bulk
