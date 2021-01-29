@@ -10,7 +10,7 @@
 
 Needs `ase`, `jax-md`, `numpy`. `nose` to run tests. (`cd tests; nosetests`).
 
-Tests currently fail unless `ase.calculators.lj` is patched to remove the energy shift. (Pending `ase` changes.)
+Tests currently fail unless `ase.calculators.lj` is supports "smooth" cutoff. Recent `master` versions support this change, since [this](https://gitlab.com/ase/ase/-/merge_requests/2212) MR.
 
 Codestyle `black`, roughly Google style otherwise.
 
