@@ -4,6 +4,8 @@
 
 `asax` exposes [`jax-md`](https://github.com/google/jax-md/) energy functions as [`ase`](https://gitlab.com/ase/ase) calculators.
 
+**This is a very early-stage experiment. Please do not use it. Feel free to help out though!**
+
 ## Facts
 
 Needs `ase`, `jax-md`, `numpy`. `nose` to run tests. (`cd tests; nosetests`).
@@ -16,7 +18,9 @@ Codestyle `black`, roughly Google style otherwise.
 
 ## Design
 
-`jax-md` is fundamentally built around functional programming: In the end, you get a function that maps `positions -> energies`. Implicitly in this, the `positions` are mapped to displacements (otherwise, the energy function wouldn't be tranlationally invariant). This function is built up with the `setup()` method of the calculator sub-classes implemented here. Since it implicitly depends on the boundary conditions, this re-building needs to be repeated every time the unit cell changes. This logic is taken care of in `asax.Calculator`.
+`jax-md` is fundamentally built around functional programming: In the end, you get a function that maps `positions -> energies`. Implicitly in this, the `positions` are mapped to displacements (otherwise, the energy function wouldn't be translationally invariant). 
+
+This function is built up with the `setup()` method of the calculator sub-classes implemented here. Since it implicitly depends on the boundary conditions, this re-building needs to be repeated every time the unit cell changes. This logic is taken care of in `asax.Calculator`.
 
 ## Shortcomings
 

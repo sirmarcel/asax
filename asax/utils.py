@@ -47,12 +47,12 @@ def get_potential_with_stress(displacement, get_energy):
 
         return energy(R)
 
-    def energy(R: space.Array) -> space.Array:
+    def potential(R: space.Array) -> space.Array:
         zeros = np.zeros((3, 3), dtype=np.double)
 
         return value_and_grad(energy_under_strain, argnums=(0, 1))(R, zeros)
 
-    return jit(energy)
+    return jit(potential)
 
 
 def _transform(T: space.Array, v: space.Array) -> space.Array:
