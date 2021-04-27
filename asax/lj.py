@@ -1,18 +1,13 @@
+from jax import jit
+from asax import jax_utils
 from .calculator import Calculator
 
 
 class LennardJones(Calculator):
     """Lennard-Jones Potential"""
+    implemented_properties = ["energy", "forces"]
 
-    implemented_properties = [
-        "energy",
-        "forces",
-        "stress",
-        # "stresses",
-        # "energies",
-    ]
-
-    def __init__(self, epsilon=1.0, sigma=1.0, rc=None, ro=None, **kwargs):
+    def __init__(self, stress=False, epsilon=1.0, sigma=1.0, rc=None, ro=None, **kwargs):
         """
         Paramters:
             sigma: The potential minimum is at  2**(1/6) * sigma, default 1.0
@@ -22,8 +17,9 @@ class LennardJones(Calculator):
             x64: Determine if double precision is used. Default to True.
 
         """
-
         super().__init__(**kwargs)
+        self.stress = stress
+        if self.stress: self.implemented_properties.append("stress")
 
         self.epsilon = epsilon
         self.sigma = sigma
@@ -36,17 +32,26 @@ class LennardJones(Calculator):
             ro = 0.8 * self.rc
         self.ro = ro
 
-    def get_energy(self, displacement):
-        return get_lj(displacement, self.epsilon, self.sigma, self.ro, self.rc)
 
+    def get_potential(self):
+        # box as vanilla np.array causes strange indexing errors with neighbor lists now and then
+        box = jnp.array(self.box)
+        normalized_ro = self.ro / self.sigma
+        normalized_rc = self.rc / self.sigma
 
-def get_lj(displacement, epsilon, sigma, ro, rc):
-    from jax_md import energy
+        if self.neighbors is None:
+            self.neighbor_fn, self.energy_fn = energy.lennard_jones_neighbor_list(self.displacement, box, sigma=self.sigma, epsilon=self.epsilon, r_onset=normalized_ro, r_cutoff=normalized_rc, per_particle=True)
+            self.neighbors = self.neighbor_fn(self.R)
 
-    return energy.lennard_jones_pair(
-        displacement,
-        sigma=sigma,
-        epsilon=epsilon,
-        r_onset=ro / sigma,
-        r_cutoff=rc / sigma,
-    )
+        if self.stress:
+            return jit(jax_utils.strained_lj_nl(self.energy_fn, self.neighbors, box))
+        return jit(jax_utils.lj_nl(self.displacement, self.sigma, self.epsilon, normalized_ro, normalized_rc))
+
+    
+    def compute_properties(self):
+        energy, energies, forces, stress = self.potential()
+
+        self.results["energy"] = energy
+        # TODO: energies
+        self.results["forces"] = forces
+        if stress: self.results["stress"] = full_3x3_to_voigt_6_stress(stress)

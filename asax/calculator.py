@@ -1,4 +1,6 @@
+from abc import ABC, abstractmethod
 import numpy as np
+from jax.config import config
 
 from ase.calculators.abc import GetPropertiesMixin
 from ase.calculators.calculator import compare_atoms, PropertyNotImplementedError
@@ -7,17 +9,19 @@ from ase.constraints import full_3x3_to_voigt_6_stress
 from asax import utils
 
 
-class Calculator(GetPropertiesMixin):
-    def __init__(self, stress=False, x64=True):
+class Calculator(ABC, GetPropertiesMixin):
+
+    # TODO: Can this be abstract?
+    implemented_properties = ["energy", "forces"]
+
+    def __init__(self, x64=True):
         self.x64 = x64
+        config.update("jax_enable_x64", self.x64)
+
         self.atoms = None
+        self.box: np.array = None
         self.results = {}
 
-        self.stress = stress
-
-        from jax.config import config
-
-        config.update("jax_enable_x64", x64)
 
     def update(self, atoms):
         if atoms is None and self.atoms is None:
@@ -27,45 +31,70 @@ class Calculator(GetPropertiesMixin):
             self.atoms = atoms.copy()
             self.results = {}
             self.setup()
+            return
 
-        else:
-            changes = compare_atoms(self.atoms, atoms)
-            if changes:
-                self.results = {}
+        changes = compare_atoms(self.atoms, atoms)
+        if not changes: return
 
-                if "cell" in changes:
-                    self.atoms = None
-                    self.update(atoms)
-                else:
-                    self.atoms = atoms
+        if changes:
+            # TODO: verify that if not changes works as expected
+            print("changes detected!")
+
+        self.results = {}
+        if "cell" in changes:
+            self.atoms = None
+            self.update(atoms)
+            return
+        
+        self.atoms = atoms
+        self.box = self.atoms.get_cell().array
+        
 
     def setup(self):
-        displacement = utils.get_displacement(self.atoms)
-        if not self.stress:
-            self.potential = utils.get_potential(displacement, self.get_energy)
-        else:
-            self.potential = utils.get_potential_with_stress(
-                displacement, self.get_energy
-            )
+        self.displacement = utils.get_displacement(self.atoms)
+        self.potential = self.get_potential()
+
+    @property
+    def R(self):
+        return self.atoms.get_positions()
+
+
+    @abstractmethod
+    def get_potential(self):
+        pass
+
+    
+    @abstractmethod
+    def compute_properties(self):
+        pass
+    
 
     def calculate(self, atoms=None, **kwargs):
         self.update(atoms)
 
-        R = self.atoms.get_positions()
+        results = self.compute_properties()
+        # TODO: Assert that all implemented properties are contained in the results dictioniary
+        self.results = results
+        
 
-        if not self.stress:
-            energy, grad = self.potential(R)
-        else:
-            energy, gradients = self.potential(R)
-            grad, stress = gradients
 
-        self.results["energy"] = float(energy)
-        self.results["forces"] = np.asarray(-grad)
+        # R = self.atoms.get_positions()
 
-        if self.stress:
-            self.results["stress"] = full_3x3_to_voigt_6_stress(
-                np.asarray(stress) / self.atoms.get_volume()
-            )
+        # if not self.stress:
+        #     energy, grad = self.potential(R)
+        # else:
+        #     energy, gradients = self.potential(R)
+        #     grad, stress = gradients
+
+        # self.results["energy"] = float(energy)
+        # self.results["forces"] = np.asarray(-grad)
+
+        # if self.stress:
+        #     self.results["stress"] = full_3x3_to_voigt_6_stress(
+        #         np.asarray(stress) / self.atoms.get_volume()
+        #     )
+
+
 
     # ase plumbing
 
@@ -90,5 +119,11 @@ class Calculator(GetPropertiesMixin):
             result = result.copy()
         return result
 
+
     def get_potential_energy(self, atoms=None):
         return self.get_property(name="energy", atoms=atoms)
+
+    
+    def get_stress(self, atoms=None):
+        # TODO
+        pass
