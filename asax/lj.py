@@ -40,6 +40,9 @@ class LennardJones(Calculator):
         if not self.atoms:
             return
 
+        # clear neighbor list. force re-initialization.
+        self._neighbors = None
+
         # non-PBC atom passed - don't compute stress
         if not all(self.atoms.get_pbc()) and "stress" in self.implemented_properties:
             self.implemented_properties.remove("stress")

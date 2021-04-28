@@ -6,14 +6,14 @@ from allclose import AllClose
 from ase.calculators.calculator import PropertyNotImplementedError
 
 class TestLennardJonesAgainstASE(TestCase, AllClose):
-    """This test only initializes the used calculators once. They should still be able to deal with changing atoms."""
-    sigma = 2.0
-    epsilon = 1.5
-    rc = 10.0
-    ro = 6.0
+    def setUp(self):
+        sigma = 2.0
+        epsilon = 1.5
+        rc = 10.0
+        ro = 6.0
 
-    j = jLJ(epsilon=epsilon, sigma=sigma, rc=rc, ro=ro, x64=True)
-    a = aLJ(epsilon=epsilon, sigma=sigma, rc=rc, ro=ro, smooth=True)
+        self.j = jLJ(epsilon=epsilon, sigma=sigma, rc=rc, ro=ro, x64=True)
+        self.a = aLJ(epsilon=epsilon, sigma=sigma, rc=rc, ro=ro, smooth=True)
 
     def test_twobody(self):
         atoms = Atoms(positions=[[0, 0, 0], [8, 0, 0]])
