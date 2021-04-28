@@ -1,8 +1,10 @@
 from typing import Callable, Tuple
 import warnings
 import jax.numpy as jnp
+import numpy as np
 from jax import grad
-from jax_md import space, quantity, energy
+from jax_md import space, energy, quantity
+from jaxlib.xla_extension import DeviceArray
 
 EnergyFn = Callable[[space.Array, energy.NeighborList], space.Array]
 PotentialFn = Callable[[space.Array], Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, None, None]]
@@ -11,7 +13,6 @@ PotentialProperties = Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]
 def get_displacement(atoms):
     if not all(atoms.get_pbc()):
         displacement, _ = space.free()
-        warnings.warn("Atoms object without periodic boundary conditions passed!")
         return displacement
 
     cell = atoms.get_cell().array
@@ -54,7 +55,7 @@ def strained_lj_nl(energy_fn, neighbors, box: jnp.ndarray) -> PotentialFn:
     return potential
 
 
-def lj_nl(energy_fn, neighbors, box: jnp.ndarray):
+def get_unstrained_neighbor_list_potential(energy_fn, neighbors) -> PotentialFn:
     def potential(R: space.Array) -> PotentialProperties:
         total_energy_fn = lambda R, *args, **kwargs: jnp.sum(energy_fn(R, *args, **kwargs))
         forces_fn = quantity.force(total_energy_fn)
@@ -62,6 +63,17 @@ def lj_nl(energy_fn, neighbors, box: jnp.ndarray):
         total_energy = total_energy_fn(R, neighbor=neighbors)
         atomwise_energies = energy_fn(R, neighbor=neighbors)
         forces = forces_fn(R, neighbor=neighbors)
-        return total_energy, atomwise_energies, forces, None
+        stress, stresses = None, None
+        return total_energy, atomwise_energies, forces, stress
 
     return potential
+
+
+def block_and_dispatch(properties: Tuple[DeviceArray, ...]):
+    for p in properties:
+        if p is None:
+            continue
+
+        p.block_until_ready()
+
+    return [None if p is None else np.array(p) for p in properties]

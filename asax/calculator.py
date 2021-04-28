@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from typing import Dict
+
 import numpy as np
 from jax.config import config
 from jax_md import space
@@ -28,22 +30,30 @@ class Calculator(GetPropertiesMixin, ABC):
         if self.atoms is None:
             self.atoms = atoms.copy()
             self.results = {}
+            self.on_atoms_changed()
+            self.setup()
+            return
+
+        changes = compare_atoms(self.atoms, atoms)
+        if changes:
+            self.results = {}
+
+            if "cell" in changes:
+                self.atoms = None
+                self.update(atoms)
+            else:
+                self.atoms = atoms
+
+            self.on_atoms_changed()
             self.setup()
 
-        else:
-            changes = compare_atoms(self.atoms, atoms)
-            if changes:
-                self.results = {}
-
-                if "cell" in changes:
-                    self.atoms = None
-                    self.update(atoms)
-                else:
-                    self.atoms = atoms
+    @abstractmethod
+    def on_atoms_changed(self):
+        """Called whenever a new atoms object is passed so that child classes can react accordingly."""
+        pass
 
     def setup(self):
-        # TODO: jit displacement?
-        self.displacement = utils.get_displacement(self.atoms)
+        self.displacement = jax_utils.get_displacement(self.atoms)
         self.potential = self.get_potential()
 
     @property
@@ -59,12 +69,30 @@ class Calculator(GetPropertiesMixin, ABC):
         pass
 
     @abstractmethod
-    def compute_properties(self):
+    def compute_properties(self) -> Dict:
+        """Property order is expected to be equal to implemented_properties"""
         pass
 
     def calculate(self, atoms=None, **kwargs):
         self.update(atoms)
-        self.results = self.compute_properties()
+        properties = self.compute_properties()
+        results = self._build_result(properties)
+
+        if not self._verify_results(results):
+            raise RuntimeError("Not all implemented properties are returned")
+        self.results = results
+
+    def _build_result(self, properties):
+        results = {}
+        for k, p in zip(self.implemented_properties, properties):
+            results[k] = p
+            print(k, p)
+        return results
+
+    def _verify_results(self, results) -> bool:
+        return all([p in results for p in self.implemented_properties])
+
+
 
     # ase plumbing
 
@@ -73,8 +101,6 @@ class Calculator(GetPropertiesMixin, ABC):
             raise PropertyNotImplementedError(f"{name} property not implemented")
 
         self.update(atoms)
-
-        print(self.results)
 
         if name not in self.results:
             if not allow_calculation:
