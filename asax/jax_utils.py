@@ -1,16 +1,14 @@
 from typing import Callable, Tuple
-import jax.numpy as jnp
-from jax_md import energy, space, quantity
-from jax_md.energy import DisplacementFn
 import warnings
+import jax.numpy as jnp
+from jax import grad
+from jax_md import space, quantity, energy
 
+EnergyFn = Callable[[space.Array, energy.NeighborList], space.Array]
 PotentialFn = Callable[[space.Array], Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, None, None]]
 PotentialProperties = Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]
 
 def get_displacement(atoms):
-    '''what asax.utils.get_displacement() does, only with functions from the new periodic_general()'''
-    # TODO: Refactor once new periodic_general() is released
-
     if not all(atoms.get_pbc()):
         displacement, _ = space.free()
         warnings.warn("Atoms object without periodic boundary conditions passed!")
@@ -30,13 +28,10 @@ def get_displacement(atoms):
 
 
 def strained_lj_nl(energy_fn, neighbors, box: jnp.ndarray) -> PotentialFn:
-
     def potential(R: space.Array) -> PotentialProperties:
         # 1) Set the box under strain using a symmetrized deformation tensor
         # 2) Override the box in the energy function
         # 3) Derive forces, stress and stresses as gradients of the deformed energy function
-        # define a default energy function, an infinitesimal deformation and a function to apply the transformation to the box
-        # energy_fn = energy.lennard_jones_pair(displacement_fn, sigma=sigma, epsilon=epsilon, r_cutoff=r_cutoff, r_onset=r_onset, per_particle=True)                     
         deformation = jnp.zeros_like(box)
 
         # a function to symmetrize the deformation tensor and apply it to the box
@@ -58,8 +53,8 @@ def strained_lj_nl(energy_fn, neighbors, box: jnp.ndarray) -> PotentialFn:
 
     return potential
 
-def lj_nl(energy_fn, neighbors, box: jnp.ndarray):
 
+def lj_nl(energy_fn, neighbors, box: jnp.ndarray):
     def potential(R: space.Array) -> PotentialProperties:
         total_energy_fn = lambda R, *args, **kwargs: jnp.sum(energy_fn(R, *args, **kwargs))
         forces_fn = quantity.force(total_energy_fn)

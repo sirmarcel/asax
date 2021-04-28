@@ -1,27 +1,25 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from jax.config import config
-
+from jax_md import space
 from ase.calculators.abc import GetPropertiesMixin
 from ase.calculators.calculator import compare_atoms, PropertyNotImplementedError
-from ase.constraints import full_3x3_to_voigt_6_stress
-
-from asax import utils
+from asax import utils, jax_utils
 
 
-class Calculator(ABC, GetPropertiesMixin):
+class Calculator(GetPropertiesMixin, ABC):
 
     # TODO: Can this be abstract?
     implemented_properties = ["energy", "forces"]
+    displacement: space.DisplacementFn
+    potential: jax_utils.PotentialFn
 
     def __init__(self, x64=True):
         self.x64 = x64
         config.update("jax_enable_x64", self.x64)
 
         self.atoms = None
-        self.box: np.array = None
         self.results = {}
-
 
     def update(self, atoms):
         if atoms is None and self.atoms is None:
@@ -34,10 +32,11 @@ class Calculator(ABC, GetPropertiesMixin):
             return
 
         changes = compare_atoms(self.atoms, atoms)
-        if not changes: return
+        if not changes:
+            return
 
         if changes:
-            # TODO: verify that if not changes works as expected
+            # TODO: verify that "if not changes" works as expected
             print("changes detected!")
 
         self.results = {}
@@ -45,12 +44,11 @@ class Calculator(ABC, GetPropertiesMixin):
             self.atoms = None
             self.update(atoms)
             return
-        
+
         self.atoms = atoms
-        self.box = self.atoms.get_cell().array
-        
 
     def setup(self):
+        # TODO: jit displacement?
         self.displacement = utils.get_displacement(self.atoms)
         self.potential = self.get_potential()
 
@@ -58,43 +56,21 @@ class Calculator(ABC, GetPropertiesMixin):
     def R(self):
         return self.atoms.get_positions()
 
+    @property
+    def box(self):
+        return self.atoms.get_cell().array
 
     @abstractmethod
     def get_potential(self):
         pass
 
-    
     @abstractmethod
     def compute_properties(self):
         pass
-    
 
     def calculate(self, atoms=None, **kwargs):
         self.update(atoms)
-
-        results = self.compute_properties()
-        # TODO: Assert that all implemented properties are contained in the results dictioniary
-        self.results = results
-        
-
-
-        # R = self.atoms.get_positions()
-
-        # if not self.stress:
-        #     energy, grad = self.potential(R)
-        # else:
-        #     energy, gradients = self.potential(R)
-        #     grad, stress = gradients
-
-        # self.results["energy"] = float(energy)
-        # self.results["forces"] = np.asarray(-grad)
-
-        # if self.stress:
-        #     self.results["stress"] = full_3x3_to_voigt_6_stress(
-        #         np.asarray(stress) / self.atoms.get_volume()
-        #     )
-
-
+        self.results = self.compute_properties()
 
     # ase plumbing
 
@@ -103,6 +79,8 @@ class Calculator(ABC, GetPropertiesMixin):
             raise PropertyNotImplementedError(f"{name} property not implemented")
 
         self.update(atoms)
+
+        print(self.results)
 
         if name not in self.results:
             if not allow_calculation:
@@ -122,8 +100,3 @@ class Calculator(ABC, GetPropertiesMixin):
 
     def get_potential_energy(self, atoms=None):
         return self.get_property(name="energy", atoms=atoms)
-
-    
-    def get_stress(self, atoms=None):
-        # TODO
-        pass
