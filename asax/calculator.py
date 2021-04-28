@@ -29,23 +29,17 @@ class Calculator(GetPropertiesMixin, ABC):
             self.atoms = atoms.copy()
             self.results = {}
             self.setup()
-            return
 
-        changes = compare_atoms(self.atoms, atoms)
-        if not changes:
-            return
+        else:
+            changes = compare_atoms(self.atoms, atoms)
+            if changes:
+                self.results = {}
 
-        if changes:
-            # TODO: verify that "if not changes" works as expected
-            print("changes detected!")
-
-        self.results = {}
-        if "cell" in changes:
-            self.atoms = None
-            self.update(atoms)
-            return
-
-        self.atoms = atoms
+                if "cell" in changes:
+                    self.atoms = None
+                    self.update(atoms)
+                else:
+                    self.atoms = atoms
 
     def setup(self):
         # TODO: jit displacement?
