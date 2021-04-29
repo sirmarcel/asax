@@ -37,18 +37,18 @@ class LennardJones(Calculator):
 
     def on_atoms_changed(self):
         # no data yet - atoms might be passed via Calculator.calculate()
-        if not self.atoms:
+        if not self.atoms_cache:
             return
 
         # clear neighbor list. force re-initialization.
         self._neighbors = None
 
         # non-PBC atom passed - don't compute stress
-        if not all(self.atoms.get_pbc()) and "stress" in self.implemented_properties:
+        if not all(self.atoms_cache.get_pbc()) and "stress" in self.implemented_properties:
             self.implemented_properties.remove("stress")
             return
 
-        if all(self.atoms.get_pbc()) and "stress" not in self.implemented_properties:
+        if all(self.atoms_cache.get_pbc()) and "stress" not in self.implemented_properties:
             self.implemented_properties.append("stress")
 
     def get_potential(self):

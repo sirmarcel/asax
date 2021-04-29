@@ -4,6 +4,7 @@ from typing import Dict
 import numpy as np
 from jax.config import config
 from jax_md import space
+from ase.atoms import Atoms
 from ase.calculators.abc import GetPropertiesMixin
 from ase.calculators.calculator import compare_atoms, PropertyNotImplementedError
 from asax import utils, jax_utils
@@ -20,32 +21,44 @@ class Calculator(GetPropertiesMixin, ABC):
         self.x64 = x64
         config.update("jax_enable_x64", self.x64)
 
-        self.atoms = None
+        self.atoms_cache: Atoms = None
         self.results = {}
 
-    def update(self, atoms):
-        if atoms is None and self.atoms is None:
+    def update(self, atoms: Atoms):
+        if atoms is None and self.atoms_cache is None:
             raise RuntimeError("Need an Atoms object to do anything!")
 
-        if self.atoms is None:
-            self.atoms = atoms.copy()
+        if self.atoms_cache is None:
+            self.atoms_cache = atoms.copy()
             self.results = {}
             self.on_atoms_changed()
             self.setup()
             return
 
-        changes = compare_atoms(self.atoms, atoms)
-        if changes:
-            self.results = {}
+        changes = compare_atoms(self.atoms_cache, atoms)
+        if not changes:
+            return
 
-            if "cell" in changes:
-                self.atoms = None
-                self.update(atoms)
-            else:
-                self.atoms = atoms
+        # cache not empty and we got a new atom that has changes
+        # => clear results, clear cache, re-run update function to write new atom to cache
+        self.results = {}
+        if "cell" in changes:
+            # TODO: Does this include switches from bulk to molecules?
+            # => displacement only requires re-initialization if this is the case
+            self.atoms_cache = None
+            self.update(atoms)
+            return
 
-            self.on_atoms_changed()
-            self.setup()
+        # TODO: Detect changes in atom count/shape
+        # => potential only requires re-initialization if this is the case
+
+        # there are changes, but not within the cell.
+        # => clear results, but write directly to the cache without copying.
+        # TODO: why this?
+        self.atoms_cache = atoms
+        self.on_atoms_changed()
+        self.setup()
+
 
     @abstractmethod
     def on_atoms_changed(self):
@@ -53,16 +66,16 @@ class Calculator(GetPropertiesMixin, ABC):
         pass
 
     def setup(self):
-        self.displacement = jax_utils.get_displacement(self.atoms)
+        self.displacement = jax_utils.get_displacement(self.atoms_cache)
         self.potential = self.get_potential()
 
     @property
     def R(self):
-        return self.atoms.get_positions()
+        return self.atoms_cache.get_positions()
 
     @property
     def box(self):
-        return self.atoms.get_cell().array
+        return self.atoms_cache.get_cell().array
 
     @abstractmethod
     def get_potential(self):
