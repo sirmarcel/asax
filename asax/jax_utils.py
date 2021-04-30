@@ -10,14 +10,15 @@ EnergyFn = Callable[[space.Array, energy.NeighborList], space.Array]
 PotentialFn = Callable[[space.Array], Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, None, None]]
 PotentialProperties = Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]
 
+# TODO: return type
 def get_displacement(atoms):
     if not all(atoms.get_pbc()):
-        displacement, _ = space.free()
-        return displacement
+        displacement, shift = space.free()
+        return displacement, shift
 
     cell = atoms.get_cell().array
     inverse_cell = space.inverse(cell)
-    displacement_in_scaled_coordinates, _ = space.periodic_general(cell)
+    displacement_in_scaled_coordinates, shift = space.periodic_general(cell)
 
     # **kwargs are now used to feed through the box information
     def displacement(Ra: space.Array, Rb: space.Array, **kwargs) -> space.Array:
@@ -25,7 +26,8 @@ def get_displacement(atoms):
         Rb_scaled = space.transform(inverse_cell, Rb)
         return displacement_in_scaled_coordinates(Ra_scaled, Rb_scaled, **kwargs)
 
-    return displacement
+    # TODO: Does shift require further mapping?
+    return displacement, shift
 
 
 def strained_lj_nl(energy_fn, neighbors, box: jnp.ndarray) -> PotentialFn:
@@ -55,7 +57,7 @@ def strained_lj_nl(energy_fn, neighbors, box: jnp.ndarray) -> PotentialFn:
     return potential
 
 
-def get_unstrained_neighbor_list_potential(energy_fn, neighbors) -> PotentialFn:
+def unstrained_neighbor_list_potential(energy_fn, neighbors) -> PotentialFn:
     def potential(R: space.Array) -> PotentialProperties:
         total_energy_fn = lambda R, *args, **kwargs: jnp.sum(energy_fn(R, *args, **kwargs))
         forces_fn = quantity.force(total_energy_fn)
