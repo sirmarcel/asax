@@ -15,6 +15,7 @@ class Calculator(GetPropertiesMixin, ABC):
     # TODO: Can this be abstract?
     implemented_properties = ["energy", "forces"]
     displacement: space.DisplacementFn
+    shift: space.ShiftFn
     potential: jax_utils.PotentialFn
 
     def __init__(self, x64=True):
@@ -66,8 +67,15 @@ class Calculator(GetPropertiesMixin, ABC):
         pass
 
     def setup(self):
-        self.displacement = jax_utils.get_displacement(self.atoms_cache)
+        self.displacement, self.shift = self.get_displacement(self.atoms_cache)
         self.potential = self.get_potential()
+
+    def get_displacement(self, atoms: Atoms):
+        if not all(atoms.get_pbc()):
+            return space.free()
+
+        box = atoms.get_cell().array
+        return space.periodic_general(box, fractional_coordinates=False)
 
     @property
     def R(self):
