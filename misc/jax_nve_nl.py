@@ -83,10 +83,14 @@ init_fn, apply_fn = simulate.nve(energy_fn, shift_fn, dt=1e-2)
 state = init_fn(key, R, kT=0.0, neighbor=neighbors)
 
 # run simulation
+steps = 1000
 start = time.monotonic()
-run_md(1000, state, neighbors)
+run_md(steps, state, neighbors)
 elapsed = time.monotonic() - start
-print("\nTotal simulation took {} seconds".format(elapsed))
+
+mean_step_time = elapsed / steps
+print("\nSimulation took {} seconds total".format(elapsed))
+print("Average time per step: {}".format(mean_step_time))
 
 # 1000 steps NL LJ Argon: 
 # 70.4 seconds

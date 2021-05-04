@@ -107,7 +107,6 @@ class Calculator(GetPropertiesMixin, ABC):
         results = {}
         for k, p in zip(self.implemented_properties, properties):
             results[k] = p
-            print(k, p)
         return results
 
     def _verify_results(self, results) -> bool:
