@@ -1,11 +1,9 @@
 from statistics import mean
-
 from ase.build import bulk
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
 from jax import jit, lax, random
 from jax_md import energy, space, simulate, quantity
 import time
-
 import asax
 from asax.jax_utils import *
 from jax.config import config
@@ -39,14 +37,17 @@ def get_potential(displacement_fn, box):
                                               r_cutoff=normalized_rc)
 
 
-def step_fn(i, state):
-    state, neighbors = state
-    neighbors = neighbor_fn(state.position, neighbors)
-    state = apply_fn(state, neighbor=neighbors)
-    return state, neighbors
+def get_step_fn(apply_fn, neighbor_fn):
+    def step_fn(i, state):
+        state, neighbors = state
+        neighbors = neighbor_fn(state.position, neighbors)
+        state = apply_fn(state, neighbor=neighbors)
+        return state, neighbors
+
+    return step_fn
 
 
-def run_nve(steps: int, state, neighbors):
+def run_nve(steps: int, step_fn, neighbor_fn, state, neighbors):
     i = 0
 
     step_times = []
@@ -88,32 +89,33 @@ def run_nve(steps: int, state, neighbors):
     return step_times
 
 
+def setup_nve(box, R):
+    displacement_fn, shift_fn = space.periodic_general(box, fractional_coordinates=False)
+    displacement_fn = jit(displacement_fn)
+    neighbor_fn, energy_fn = get_potential(displacement_fn, box)
+    initial_neighbor_list = neighbor_fn(R)
+
+    energy_fn = jit(energy_fn)
+    shift_fn = jit(shift_fn)
+
+    _, apply_fn = simulate.nve(energy_fn, shift_fn, dt=dt)
+    initial_state = get_initial_nve_state(atoms)
+    step_fn = get_step_fn(apply_fn, neighbor_fn)
+
+    return initial_state, step_fn, initial_neighbor_list, neighbor_fn
+
+
 steps = 1000
-timestep = 5 * 1e-15    # 5 fs
+dt = 5 * 1e-15    # 5 fs
 atoms, box, R = initialize_system()
 start = time.monotonic()
 
-key = random.PRNGKey(0)
-displacement_fn, shift_fn = space.periodic_general(box, fractional_coordinates=False)
-displacement_fn = jit(displacement_fn)
-shift_fn = jit(shift_fn)
+initial_state, step_fn, initial_neighbor_list, neighbor_fn = setup_nve(box, R)
+step_timings = run_nve(steps, step_fn, neighbor_fn, initial_state, initial_neighbor_list)
 
-neighbor_fn, energy_fn = get_potential(displacement_fn, box)
-energy_fn = jit(energy_fn)
-
-# build initial neighbor list and state for NVE
-neighbors = neighbor_fn(R)
-# init_fn, apply_fn = simulate.nve(energy_fn, shift_fn, dt=timestep)
-# state = init_fn(key, R, kT=1.0, neighbor=neighbors)
-_, apply_fn = simulate.nve(energy_fn, shift_fn, dt=timestep)
-state = get_initial_nve_state(atoms)
-
-# run NVE
-step_times = run_nve(steps, state, neighbors)
-mean_step_time_no_init_ms = round(mean(step_times[1:]), 2)
+mean_step_time_ms = round(mean(step_timings[1:]), 2)
 total_runtime_seconds = round(time.monotonic() - start, 2)
-# mean_step_time_ms = round((elapsed_seconds / steps) * 1000, 2)
 
 print("{} steps".format(steps))
 print("{} seconds total".format(total_runtime_seconds))
-print("{} ms/step (w/o first run)".format(mean_step_time_no_init_ms))
+print("{} ms/step (w/o first run)".format(mean_step_time_ms))
