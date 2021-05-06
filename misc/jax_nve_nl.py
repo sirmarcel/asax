@@ -28,6 +28,7 @@ class NveSimulation:
 
     initialization_time_ms: float
     step_times_ms: List[float]
+    nl_recalculation_events: List[bool]
 
     potential_energy: List[float]
     kinetic_energy: List[float]
@@ -99,6 +100,7 @@ class NveSimulation:
 
     def run(self, steps: int):
         self.step_times_ms = []
+        self.nl_recalculation_events = []
         self.potential_energy = []
         self.kinetic_energy = []
 
@@ -113,6 +115,7 @@ class NveSimulation:
             if neighbors.did_buffer_overflow:
                 print("NL overflow, recomputing...")
                 neighbors = self.neighbor_fn(state.position)
+                self.nl_recalculation_events.append(i)
                 continue
 
             # self.potential_energy += [self.energy_fn(state.position, neighbor=neighbors)]
@@ -132,8 +135,8 @@ def initialize_system():
     return atoms
 
 
-atoms = initialize_system()
-sim = NveSimulation(atoms, dt=5 * 1e-15)    # 5 fs
-sim.run(steps=1000)
+# atoms = initialize_system()
+# sim = NveSimulation(atoms, dt=5 * 1e-15)    # 5 fs
+# sim.run(steps=1000)
 
-print(sim.step_times_ms)
+# print(sim.step_times_ms)
