@@ -1,18 +1,17 @@
-from statistics import mean
-from typing import Type, List
-
-from ase.build import bulk
-from ase.calculators.lj import LennardJones as aLJ
-from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
-from jax import jit, lax, random
-from jax_md import energy, space, simulate, quantity
 import time
+from typing import List, Tuple, Dict
 
-from jax_md.energy import NeighborFn, NeighborList
-from jax_md.simulate import Simulator, ApplyFn
-
-from asax.jax_utils import *
+import numpy as np
+from ase import units, Atoms
+from jax import jit, lax
 from jax.config import config
+from jax_md import simulate, space, energy
+from jax_md.energy import NeighborFn, NeighborList
+from jax_md.simulate import ApplyFn
+
+from asax import jax_utils
+from asax.jax_utils import DisplacementFn, ShiftFn, EnergyFn, NVEState
+
 config.update("jax_enable_x64", True)
 
 
@@ -27,15 +26,15 @@ class NveSimulation:
     initial_neighbor_list: NeighborList
 
     initialization_time_ms: float
-    step_times_ms: List[float]
-    nl_recalculation_events: List[bool]
+    # nl_recalculation_events: Dict[int, float]   # step, float
+    nl_recalculation_events: List[int]
+    # batch_times_ms: List[float]
+    batch_times_ms: Dict[int, float]  # step, float
 
-    potential_energy: List[float]
-    kinetic_energy: List[float]
-
-    def __init__(self, atoms: Atoms, dt: float):
+    def __init__(self, atoms: Atoms, dt: float, batch_size: int):
         self.atoms = atoms
         self.dt = dt
+        self.batch_size = batch_size
         self.box = atoms.get_cell().array
         self.R = atoms.get_positions()
         self._initialize()
@@ -98,11 +97,24 @@ class NveSimulation:
 
         return step_fn
 
-    def run(self, steps: int):
-        self.step_times_ms = []
+    @property
+    def step_times(self):
+        """Returns average times per step within each batch (in miliseconds)"""
+        return np.array(list(self.batch_times_ms.values())) / self.batch_size
+
+    @property
+    def total_simulation_time(self):
+        """Returns the total simulation time (in seconds)"""
+        return round(np.sum(self.step_times) * self.batch_size / 1000, 2)
+
+    def run(self, steps: int, verbose=False):
+        if steps % self.batch_size != 0:
+            raise ValueError("Number of steps need to be dividable by batch_size")
+
+        # self.batch_times_ms = []
         self.nl_recalculation_events = []
-        self.potential_energy = []
-        self.kinetic_energy = []
+        self.batch_times_ms = {}
+        # self.nl_recalculation_events = {}
 
         step_fn = self._get_step_fn(self.neighbor_fn, self.apply_fn)
         state = self.initial_state
@@ -110,34 +122,31 @@ class NveSimulation:
 
         i = 0
         start = time.monotonic()
+
         while i < steps:
-            state, neighbors = lax.fori_loop(0, 5, step_fn, (state, neighbors))       # TODO: why 0 to 100?
+            i += self.batch_size
+            state, neighbors = lax.fori_loop(0, self.batch_size, step_fn, (state, neighbors))
+
             if neighbors.did_buffer_overflow:
-                print("NL overflow, recomputing...")
                 neighbors = self.neighbor_fn(state.position)
                 self.nl_recalculation_events.append(i)
+                if verbose:
+                    print("Steps {}/{}: Neighbor list overflow, recomputing...".format(i, steps))
                 continue
 
-            # self.potential_energy += [self.energy_fn(state.position, neighbor=neighbors)]
-            # self.kinetic_energy += [quantity.kinetic_energy(state.velocity)]
-
             now, step_ms = self._measure_elapsed_time(start)
-            self.step_times_ms.append(step_ms)
+            # self.batch_times_ms.append(step_ms)
+            self.batch_times_ms[i + self.batch_size] = step_ms
             start = now
-            i += 1
+
+            if verbose:
+                print("Steps {}/{} took {} ms".format(i, steps, step_ms))
 
 
-def initialize_cubic_argon():
-    atoms = bulk("Ar", cubic=True) * [5, 5, 5]
-    MaxwellBoltzmannDistribution(atoms, temperature_K=300)
-    Stationary(atoms)
-    
-    atoms.calc = aLJ(sigma=2.0, epsilon=1.5, rc=10.0, ro=6.0)  # TODO: Remove later
-    return atoms
+atoms = jax_utils.initialize_cubic_argon(multiplier=10)
+sim = NveSimulation(atoms, dt=5 * units.fs, batch_size=5)
+sim.run(steps=1000)
 
+print("Total simulation time: {} s".format(sim.total_simulation_time))
+print("Average runtime/step: {} ms".format(np.mean(sim.step_times)))
 
-# atoms = initialize_system()
-# sim = NveSimulation(atoms, dt=5 * 1e-15)    # 5 fs
-# sim.run(steps=1000)
-
-# print(sim.step_times_ms)

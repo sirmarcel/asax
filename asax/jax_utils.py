@@ -1,4 +1,4 @@
-from typing import Callable, Tuple, Any, Union
+from typing import Callable, Tuple, Any, Union, List
 import warnings
 from ase.build import bulk
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
@@ -79,9 +79,10 @@ def block_and_dispatch(properties: Tuple[DeviceArray, ...]):
 
     return [None if p is None else np.array(p) for p in properties]
 
-def initialize_cubic_argon():
-    atoms = bulk("Ar", cubic=True) * [5, 5, 5]
-    MaxwellBoltzmannDistribution(atoms, temperature_K=300)
+
+def initialize_cubic_argon(multiplier: List[int] = 5, temperature_K: int = 30):
+    atoms = bulk("Ar", cubic=True) * [multiplier, multiplier, multiplier]
+    MaxwellBoltzmannDistribution(atoms, temperature_K=temperature_K)
     Stationary(atoms)
     
     atoms.calc = aLJ(sigma=2.0, epsilon=1.5, rc=10.0, ro=6.0)  # TODO: Remove later
