@@ -2,6 +2,7 @@ from statistics import mean
 from typing import Type, List
 
 from ase.build import bulk
+from ase.calculators.lj import LennardJones as aLJ
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
 from jax import jit, lax, random
 from jax_md import energy, space, simulate, quantity
@@ -10,7 +11,6 @@ import time
 from jax_md.energy import NeighborFn, NeighborList
 from jax_md.simulate import Simulator, ApplyFn
 
-import asax
 from asax.jax_utils import *
 from jax.config import config
 config.update("jax_enable_x64", True)
@@ -111,7 +111,7 @@ class NveSimulation:
         i = 0
         start = time.monotonic()
         while i < steps:
-            state, neighbors = lax.fori_loop(0, 100, step_fn, (state, neighbors))       # TODO: why 0 to 100?
+            state, neighbors = lax.fori_loop(0, 5, step_fn, (state, neighbors))       # TODO: why 0 to 100?
             if neighbors.did_buffer_overflow:
                 print("NL overflow, recomputing...")
                 neighbors = self.neighbor_fn(state.position)
@@ -127,11 +127,12 @@ class NveSimulation:
             i += 1
 
 
-def initialize_system():
+def initialize_cubic_argon():
     atoms = bulk("Ar", cubic=True) * [5, 5, 5]
     MaxwellBoltzmannDistribution(atoms, temperature_K=300)
     Stationary(atoms)
-    atoms.calc = asax.lj.LennardJones(sigma=2.0, epsilon=1.5, rc=10.0, ro=6.0)  # TODO: Remove later
+    
+    atoms.calc = aLJ(sigma=2.0, epsilon=1.5, rc=10.0, ro=6.0)  # TODO: Remove later
     return atoms
 
 

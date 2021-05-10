@@ -1,8 +1,11 @@
 from typing import Callable, Tuple, Any, Union
 import warnings
+from ase.build import bulk
+from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
 import jax.numpy as jnp
 import numpy as np
 from ase import Atoms
+from ase.calculators.lj import LennardJones as aLJ
 from jax import grad
 from jax_md import space, energy, quantity, util
 from jax_md.energy import DisplacementFn
@@ -61,7 +64,7 @@ def unstrained_neighbor_list_potential(energy_fn, neighbors) -> PotentialFn:
 
 def get_initial_nve_state(atoms: Atoms) -> NVEState:
     R = atoms.get_positions()
-    V = atoms.get_velocities()
+    V = atoms.get_velocities()  # å/ ase fs
     forces = atoms.get_forces()
     masses = atoms.get_masses()[0]
     return NVEState(R, V, forces, masses)
@@ -75,3 +78,11 @@ def block_and_dispatch(properties: Tuple[DeviceArray, ...]):
         p.block_until_ready()
 
     return [None if p is None else np.array(p) for p in properties]
+
+def initialize_cubic_argon():
+    atoms = bulk("Ar", cubic=True) * [5, 5, 5]
+    MaxwellBoltzmannDistribution(atoms, temperature_K=300)
+    Stationary(atoms)
+    
+    atoms.calc = aLJ(sigma=2.0, epsilon=1.5, rc=10.0, ro=6.0)  # TODO: Remove later
+    return atoms

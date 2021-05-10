@@ -1,32 +1,40 @@
+import sys
+if not '/home/pop518504/git/asax-fabian' in sys.path:
+    sys.path.insert(0, '/home/pop518504/git/asax-fabian')
+    
+from asax.jax_utils import initialize_cubic_argon
 from ase import units
+from ase.atoms import Atoms
 from ase.md import VelocityVerlet
-from ase.build import bulk
 import time
 from ase.calculators.lj import LennardJones as aseLJ
-from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
 
-sigma = 2.0
-epsilon = 1.5
-rc = 10.0
-ro = 6.0
+class AseNve:
+    step_time_ms: float
 
-atoms = bulk("Ar", cubic=True) * [5, 5, 5]
-MaxwellBoltzmannDistribution(atoms, temperature_K=300)
-Stationary(atoms)
+    def __init__(self, atoms: Atoms, dt: float):
+        self.atoms = atoms
+        # TODO: Implement dt parameter
+        self.dyn = VelocityVerlet(atoms, timestep=dt)
 
-atoms.calc = aseLJ(epsilon=epsilon, sigma=sigma, rc=rc, ro=ro, smooth=True)
-
-steps = 1000
-start = time.monotonic()
-
-dyn = VelocityVerlet(atoms, timestep=5.0 * units.fs)
-dyn.run(steps)
-
-elapsed_seconds = round(time.monotonic() - start, 2)
-step_time_ms = round((elapsed_seconds / steps) * 1000, 2)
-
-print("{} steps".format(steps))
-print("{} seconds total".format(elapsed_seconds))
-print("{} ms/step".format(step_time_ms))
+    def run(self, steps: int):
+        self.step_time_ms = None
+        start = time.monotonic()
+        self.dyn.run(steps)
+        elapsed = round(time.monotonic() - start, 2)
+        self.step_time_ms = round(elapsed/steps * 1000, 2)
 
 
+steps = 10000
+atoms = initialize_cubic_argon()
+
+md = AseNve(atoms, 5.0 * units.fs)
+md.run(steps)
+
+print("{} steps: {} ms/step".format(steps, md.step_time_ms))
+
+# 100 steps: 160.7 ms/step
+# 500 steps: 73.4 ms/step
+# 1000 steps: 62.19 ms/step
+# 2000 steps: 62.81 ms/step
+# 10.000 steps: 
