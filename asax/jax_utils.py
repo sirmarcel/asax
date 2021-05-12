@@ -19,7 +19,7 @@ PotentialFn = Callable[[space.Array], Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarra
 PotentialProperties = Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]
 
 
-def strained_lj_nl(energy_fn, neighbors, box: jnp.ndarray) -> PotentialFn:
+def strained_neighbor_list_potential(energy_fn, neighbors, box: jnp.ndarray) -> PotentialFn:
     def potential(R: space.Array) -> PotentialProperties:
         # 1) Set the box under strain using a symmetrized deformation tensor
         # 2) Override the box in the energy function

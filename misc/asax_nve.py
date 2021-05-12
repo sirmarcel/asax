@@ -10,7 +10,8 @@ epsilon = 1.5
 rc = 10.0
 ro = 6.0
 
-def run_nve(steps: int, timestep, kT):
+
+def run_nve(steps: int, timestep):
     start = time.monotonic()
 
     atoms = bulk("Ar", cubic=True) * [5, 5, 5]
@@ -28,4 +29,4 @@ def run_nve(steps: int, timestep, kT):
     return steps, elapsed_seconds, mean_step_time_ms
 
 
-run_nve(10000, timestep=5.0 * units.fs, kT=None)
+run_nve(10000, timestep=5.0 * units.fs)

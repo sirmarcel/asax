@@ -1,7 +1,3 @@
-import sys
-if not '/home/pop518504/git/asax-fabian' in sys.path:
-    sys.path.insert(0, '/home/pop518504/git/asax-fabian')
-    
 from asax.jax_utils import initialize_cubic_argon
 from ase import units
 from ase.atoms import Atoms

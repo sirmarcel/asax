@@ -67,7 +67,7 @@ class LennardJones(Calculator):
             self._neighbors = self._neighbor_fn(self.R)
 
         if "stress" in self.implemented_properties:
-            return jit(jax_utils.strained_lj_nl(self._energy_fn, self._neighbors, box))
+            return jit(jax_utils.strained_neighbor_list_potential(self._energy_fn, self._neighbors, box))
 
         return jit(jax_utils.get_unstrained_neighbor_list_potential(self._energy_fn, self._neighbors))
 
