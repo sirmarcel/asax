@@ -22,21 +22,21 @@ class Calculator(GetPropertiesMixin, ABC):
         self.x64 = x64
         config.update("jax_enable_x64", self.x64)
 
-        self.atoms_cache: Atoms = None
+        self.atoms: Atoms = None
         self.results = {}
 
     def update(self, atoms: Atoms):
-        if atoms is None and self.atoms_cache is None:
+        if atoms is None and self.atoms is None:
             raise RuntimeError("Need an Atoms object to do anything!")
 
-        if self.atoms_cache is None:
-            self.atoms_cache = atoms.copy()
+        if self.atoms is None:
+            self.atoms = atoms.copy()
             self.results = {}
             self.on_atoms_changed()
             self.setup()
             return
 
-        changes = compare_atoms(self.atoms_cache, atoms)
+        changes = compare_atoms(self.atoms, atoms)
         if not changes:
             return
 
@@ -46,7 +46,7 @@ class Calculator(GetPropertiesMixin, ABC):
         if "cell" in changes:
             # TODO: Does this include switches from bulk to molecules?
             # => displacement only requires re-initialization if this is the case
-            self.atoms_cache = None
+            self.atoms = None
             self.update(atoms)
             return
 
@@ -56,7 +56,7 @@ class Calculator(GetPropertiesMixin, ABC):
         # there are changes, but not within the cell.
         # => clear results, but write directly to the cache without copying.
         # TODO: why this?
-        self.atoms_cache = atoms
+        self.atoms = atoms
         self.on_atoms_changed()
         self.setup()
 
@@ -67,7 +67,7 @@ class Calculator(GetPropertiesMixin, ABC):
         pass
 
     def setup(self):
-        self.displacement, self.shift = self.get_displacement(self.atoms_cache)
+        self.displacement, self.shift = self.get_displacement(self.atoms)
         self.potential = self.get_potential()
 
     def get_displacement(self, atoms: Atoms):
@@ -79,11 +79,11 @@ class Calculator(GetPropertiesMixin, ABC):
 
     @property
     def R(self):
-        return self.atoms_cache.get_positions()
+        return self.atoms.get_positions()
 
     @property
     def box(self):
-        return self.atoms_cache.get_cell().array
+        return self.atoms.get_cell().array
 
     @abstractmethod
     def get_potential(self):
