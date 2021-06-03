@@ -56,8 +56,7 @@ def unstrained_neighbor_list_potential(energy_fn, neighbors) -> PotentialFn:
         total_energy = total_energy_fn(R, neighbor=neighbors)
         atomwise_energies = energy_fn(R, neighbor=neighbors)
         forces = forces_fn(R, neighbor=neighbors)
-        stress, stresses = None, None
-        return total_energy, atomwise_energies, forces, stress
+        return total_energy, atomwise_energies, forces, None
 
     return potential
 

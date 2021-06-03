@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Dict, Tuple
 
 import numpy as np
 from jax.config import config
@@ -11,9 +11,8 @@ from asax import utils, jax_utils
 
 
 class Calculator(GetPropertiesMixin, ABC):
-
-    # TODO: Can this be abstract?
     implemented_properties = ["energy", "forces"]
+
     displacement: space.DisplacementFn
     shift: space.ShiftFn
     potential: jax_utils.PotentialFn
@@ -91,28 +90,12 @@ class Calculator(GetPropertiesMixin, ABC):
 
     @abstractmethod
     def compute_properties(self) -> Dict:
-        """Property order is expected to be equal to implemented_properties"""
+        """Expected to return a dictionary keyed on (a subset of) implemented_properties"""
         pass
 
     def calculate(self, atoms=None, **kwargs):
         self.update(atoms)
-        properties = self.compute_properties()
-        results = self._build_result(properties)
-
-        if not self._verify_results(results):
-            raise RuntimeError("Not all implemented properties are returned")
-        self.results = results
-
-    def _build_result(self, properties):
-        results = {}
-        for k, p in zip(self.implemented_properties, properties):
-            results[k] = p
-        return results
-
-    def _verify_results(self, results) -> bool:
-        return all([p in results for p in self.implemented_properties])
-
-
+        self.results = self.compute_properties()
 
     # ase plumbing
 
