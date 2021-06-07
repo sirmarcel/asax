@@ -59,7 +59,6 @@ class Calculator(GetPropertiesMixin, ABC):
         self.on_atoms_changed()
         self.setup()
 
-
     @abstractmethod
     def on_atoms_changed(self):
         """Called whenever a new atoms object is passed so that child classes can react accordingly."""
@@ -113,13 +112,14 @@ class Calculator(GetPropertiesMixin, ABC):
         if name not in self.results:
             # For some reason the calculator was not able to do what we want,
             # and that is OK.
-            raise PropertyNotImplementedError(f"{name} property not present in results!")
+            raise PropertyNotImplementedError(
+                f"{name} property not present in results!"
+            )
 
         result = self.results[name]
         if isinstance(result, np.ndarray):
             result = result.copy()
         return result
-
 
     def get_potential_energy(self, atoms=None):
         return self.get_property(name="energy", atoms=atoms)

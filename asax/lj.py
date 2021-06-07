@@ -10,13 +10,16 @@ from ase.constraints import full_3x3_to_voigt_6_stress
 
 class LennardJones(Calculator):
     """Lennard-Jones Potential"""
+
     implemented_properties = ["energy", "energies", "forces", "stress"]
 
     _energy_fn: jax_utils.EnergyFn = None
     _neighbor_fn: energy.NeighborFn = None
     _neighbors: partition.NeighborList = None
 
-    def __init__(self, epsilon=1.0, sigma=1.0, rc=None, ro=None, stress=False, **kwargs):
+    def __init__(
+        self, epsilon=1.0, sigma=1.0, rc=None, ro=None, stress=False, **kwargs
+    ):
         """
         Parameters:
             sigma: The potential minimum is at  2**(1/6) * sigma, default 1.0
@@ -37,7 +40,6 @@ class LennardJones(Calculator):
             ro = 0.8 * self.rc
         self.ro = ro
         self.stress = stress
-        
 
     def on_atoms_changed(self):
         # no data yet - atoms might be passed via Calculator.calculate()
@@ -58,27 +60,43 @@ class LennardJones(Calculator):
         normalized_rc = self.rc / self.sigma
 
         if self._neighbors is None:
-            self._neighbor_fn, self._energy_fn = energy.lennard_jones_neighbor_list(self.displacement, box,
-                                                                                    sigma=jnp.array(self.sigma),
-                                                                                    epsilon=jnp.array(self.epsilon),
-                                                                                    r_onset=normalized_ro,
-                                                                                    r_cutoff=normalized_rc,
-                                                                                    per_particle=True)
+            self._neighbor_fn, self._energy_fn = energy.lennard_jones_neighbor_list(
+                self.displacement,
+                box,
+                sigma=jnp.array(self.sigma),
+                epsilon=jnp.array(self.epsilon),
+                r_onset=normalized_ro,
+                r_cutoff=normalized_rc,
+                per_particle=True,
+            )
             self._neighbors = self._neighbor_fn(self.R)
 
         if self.stress:
-            return jit(jax_utils.strained_neighbor_list_potential(self._energy_fn, self._neighbors, box))
+            return jit(
+                jax_utils.strained_neighbor_list_potential(
+                    self._energy_fn, self._neighbors, box
+                )
+            )
 
-        return jit(jax_utils.unstrained_neighbor_list_potential(self._energy_fn, self._neighbors))
+        return jit(
+            jax_utils.unstrained_neighbor_list_potential(
+                self._energy_fn, self._neighbors
+            )
+        )
 
     def compute_properties(self) -> Dict:
         properties = self.potential(self.R)
-        potential_energy, potential_energies, forces, stress = jax_utils.block_and_dispatch(properties)
+        (
+            potential_energy,
+            potential_energies,
+            forces,
+            stress,
+        ) = jax_utils.block_and_dispatch(properties)
 
         result = {
             "energy": potential_energy,
             "energies": potential_energies,
-            "forces": forces
+            "forces": forces,
         }
 
         if stress is not None:

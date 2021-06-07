@@ -5,8 +5,10 @@ from asax.lj import LennardJones as jLJ
 from allclose import AllClose
 from ase.calculators.calculator import PropertyNotImplementedError
 
+
 class TestLennardJonesAgainstASE(TestCase, AllClose):
     """This test only initializes the used calculators once. They should still be able to deal with changing atoms."""
+
     sigma = 2.0
     epsilon = 1.5
     rc = 10.0
@@ -45,9 +47,7 @@ class TestLennardJonesAgainstASE(TestCase, AllClose):
         self.assertAllClose(
             self.a.get_forces(atoms), self.j.get_forces(atoms), atol=1e-14
         )
-        self.assertAllClose(
-            self.a.get_stress(atoms), self.j.get_stress(atoms)
-        )
+        self.assertAllClose(self.a.get_stress(atoms), self.j.get_stress(atoms))
 
     def test_solid_noncubic(self):
         from ase.build import bulk
@@ -61,6 +61,4 @@ class TestLennardJonesAgainstASE(TestCase, AllClose):
         self.assertAllClose(
             self.a.get_forces(atoms), self.j.get_forces(atoms), atol=1e-14
         )
-        self.assertAllClose(
-            self.a.get_stress(atoms), self.j.get_stress(atoms)
-        )
+        self.assertAllClose(self.a.get_stress(atoms), self.j.get_stress(atoms))
