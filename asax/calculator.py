@@ -1,71 +1,100 @@
-import numpy as np
+from abc import ABC, abstractmethod
+from typing import Dict, Tuple
 
+import numpy as np
+from jax.config import config
+from jax_md import space
+from ase.atoms import Atoms
 from ase.calculators.abc import GetPropertiesMixin
 from ase.calculators.calculator import compare_atoms, PropertyNotImplementedError
-from ase.constraints import full_3x3_to_voigt_6_stress
-
-from asax import utils
+from asax import utils, jax_utils
 
 
-class Calculator(GetPropertiesMixin):
-    def __init__(self, stress=False, x64=True):
+class Calculator(GetPropertiesMixin, ABC):
+    implemented_properties = ["energy", "forces"]
+
+    displacement: space.DisplacementFn
+    shift: space.ShiftFn
+    potential: jax_utils.PotentialFn
+
+    def __init__(self, x64=True):
         self.x64 = x64
-        self.atoms = None
+        config.update("jax_enable_x64", self.x64)
+
+        self.atoms: Atoms = None
         self.results = {}
 
-        self.stress = stress
-
-        from jax.config import config
-
-        config.update("jax_enable_x64", x64)
-
-    def update(self, atoms):
+    def update(self, atoms: Atoms):
         if atoms is None and self.atoms is None:
             raise RuntimeError("Need an Atoms object to do anything!")
 
         if self.atoms is None:
             self.atoms = atoms.copy()
             self.results = {}
+            self.on_atoms_changed()
             self.setup()
+            return
 
-        else:
-            changes = compare_atoms(self.atoms, atoms)
-            if changes:
-                self.results = {}
+        changes = compare_atoms(self.atoms, atoms)
+        if not changes:
+            return
 
-                if "cell" in changes:
-                    self.atoms = None
-                    self.update(atoms)
-                else:
-                    self.atoms = atoms
+        # cache not empty and we got a new atom that has changes
+        # => clear results, clear cache, re-run update function to write new atom to cache
+        self.results = {}
+        if "cell" in changes:
+            # TODO: Does this include switches from bulk to molecules?
+            # => displacement only requires re-initialization if this is the case
+            self.atoms = None
+            self.update(atoms)
+            return
+
+        # TODO: Detect changes in atom count/shape
+        # => potential only requires re-initialization if this is the case
+
+        # there are changes, but not within the cell.
+        # => clear results, but write directly to the cache without copying.
+        # TODO: why this?
+        self.atoms = atoms
+        self.on_atoms_changed()
+        self.setup()
+
+    @abstractmethod
+    def on_atoms_changed(self):
+        """Called whenever a new atoms object is passed so that child classes can react accordingly."""
+        pass
 
     def setup(self):
-        displacement = utils.get_displacement(self.atoms)
-        if not self.stress:
-            self.potential = utils.get_potential(displacement, self.get_energy)
-        else:
-            self.potential = utils.get_potential_with_stress(
-                displacement, self.get_energy
-            )
+        self.displacement, self.shift = self.get_displacement(self.atoms)
+        self.potential = self.get_potential()
+
+    def get_displacement(self, atoms: Atoms):
+        if not all(atoms.get_pbc()):
+            return space.free()
+
+        box = atoms.get_cell().array
+        return space.periodic_general(box, fractional_coordinates=False)
+
+    @property
+    def R(self):
+        return self.atoms.get_positions()
+
+    @property
+    def box(self):
+        return self.atoms.get_cell().array
+
+    @abstractmethod
+    def get_potential(self):
+        pass
+
+    @abstractmethod
+    def compute_properties(self) -> Dict:
+        """Expected to return a dictionary keyed on (a subset of) implemented_properties"""
+        pass
 
     def calculate(self, atoms=None, **kwargs):
         self.update(atoms)
-
-        R = self.atoms.get_positions()
-
-        if not self.stress:
-            energy, grad = self.potential(R)
-        else:
-            energy, gradients = self.potential(R)
-            grad, stress = gradients
-
-        self.results["energy"] = float(energy)
-        self.results["forces"] = np.asarray(-grad)
-
-        if self.stress:
-            self.results["stress"] = full_3x3_to_voigt_6_stress(
-                np.asarray(stress) / self.atoms.get_volume()
-            )
+        self.results = self.compute_properties()
 
     # ase plumbing
 
@@ -83,7 +112,9 @@ class Calculator(GetPropertiesMixin):
         if name not in self.results:
             # For some reason the calculator was not able to do what we want,
             # and that is OK.
-            raise PropertyNotImplementedError(f"{name} property not present in results!")
+            raise PropertyNotImplementedError(
+                f"{name} property not present in results!"
+            )
 
         result = self.results[name]
         if isinstance(result, np.ndarray):

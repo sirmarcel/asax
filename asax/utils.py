@@ -9,7 +9,7 @@ def get_displacement(atoms):
         displacement, _ = space.free()
     else:
         cell = atoms.get_cell().array
-        inverse = space._small_inverse(cell)
+        inverse = space.inverse(cell)
 
         displacement_in_scaled_coordinates, _ = space.periodic_general(cell)
 
