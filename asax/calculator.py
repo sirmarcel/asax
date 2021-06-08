@@ -49,6 +49,10 @@ class Calculator(GetPropertiesMixin, ABC):
             self.update(atoms)
             return
 
+        if "positions" in changes:
+            self.results = self.compute_properties()
+            return
+
         # TODO: Detect changes in atom count/shape
         # => potential only requires re-initialization if this is the case
 
