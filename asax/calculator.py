@@ -29,46 +29,34 @@ class Calculator(GetPropertiesMixin, ABC):
             raise RuntimeError("Need an Atoms object to do anything!")
 
         if self.atoms is None:
-            self.atoms = atoms.copy()
+            # new or reset calculator: redo everything
+            self.on_atoms_changed(atoms)
+            self.atoms = atoms.copy()  # avoid missing changes
             self.results = {}
-            self.on_atoms_changed()
             self.setup()
             return
 
         changes = compare_atoms(self.atoms, atoms)
-        if not changes:
-            return
+        if changes:
+            # any change invalidates results
+            self.results = {}
 
-        # cache not empty and we got a new atom that has changes
-        # => clear results, clear cache, re-run update function to write new atom to cache
-        self.results = {}
-        if "cell" in changes:
-            # TODO: Does this include switches from bulk to molecules?
-            # => displacement only requires re-initialization if this is the case
-            self.atoms = None
-            self.update(atoms)
-            return
+            if "cell" in changes or "pbc" in changes:
+                # need to recreate displacement; might as well start over
+                self.atoms = None
+                self.update(atoms)
 
-        if "positions" in changes:
-            self.results = self.compute_properties()
-            return
-
-        # TODO: Detect changes in atom count/shape
-        # => potential only requires re-initialization if this is the case
-
-        # there are changes, but not within the cell.
-        # => clear results, but write directly to the cache without copying.
-        # TODO: why this?
-        self.atoms = atoms
-        self.on_atoms_changed()
-        self.setup()
+            # no major changes, let subclass deal with it
+            self.on_atoms_changed(atoms)
+            self.atoms = atoms.copy()
 
     @abstractmethod
-    def on_atoms_changed(self):
-        """Called whenever a new atoms object is passed so that child classes can react accordingly."""
+    def on_atoms_changed(self, atoms: Atoms):
+        """Called whenever a new atoms object is passed so that child classes can react"""
         pass
 
     def setup(self):
+        """Create displacement, shift and potential"""
         self.displacement, self.shift = self.get_displacement(self.atoms)
         self.potential = self.get_potential()
 
@@ -116,9 +104,7 @@ class Calculator(GetPropertiesMixin, ABC):
         if name not in self.results:
             # For some reason the calculator was not able to do what we want,
             # and that is OK.
-            raise PropertyNotImplementedError(
-                f"{name} property not present in results!"
-            )
+            raise PropertyNotImplementedError(f"{name} property not present in results!")
 
         result = self.results[name]
         if isinstance(result, np.ndarray):
