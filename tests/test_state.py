@@ -32,6 +32,19 @@ class TestState(TestCase):
         calculator.update(self.atoms2)
         calculator.on_atoms_changed.assert_called_once()
 
+
+    def test_pbc_changed(self):
+        calculator = LennardJones()
+        calculator.on_atoms_changed = MagicMock()
+
+        calculator.update(self.atoms1)
+        calculator.on_atoms_changed.assert_called_once()
+
+        calculator.on_atoms_changed.reset_mock()
+        calculator.update(self.atoms3)
+        calculator.on_atoms_changed.assert_called_once()
+
+
     def test_setup(self):
         calculator = LennardJones()
         calculator.setup = MagicMock()
