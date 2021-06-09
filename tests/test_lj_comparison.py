@@ -15,6 +15,7 @@ class TestLennardJonesAgainstASE(TestCase, AllClose):
     ro = 6.0
 
     j = jLJ(epsilon=epsilon, sigma=sigma, rc=rc, ro=ro, x64=True)
+    j_stress = jLJ(epsilon=epsilon, sigma=sigma, rc=rc, ro=ro, stress=True, x64=True)
     a = aLJ(epsilon=epsilon, sigma=sigma, rc=rc, ro=ro, smooth=True)
 
     def test_twobody(self):
@@ -42,12 +43,12 @@ class TestLennardJonesAgainstASE(TestCase, AllClose):
         atoms.set_cell(1.05 * atoms.get_cell(), scale_atoms=True)
 
         self.assertAllClose(
-            self.a.get_potential_energy(atoms), self.j.get_potential_energy(atoms)
+            self.a.get_potential_energy(atoms), self.j_stress.get_potential_energy(atoms)
         )
         self.assertAllClose(
-            self.a.get_forces(atoms), self.j.get_forces(atoms), atol=1e-14
+            self.a.get_forces(atoms), self.j_stress.get_forces(atoms), atol=1e-14
         )
-        self.assertAllClose(self.a.get_stress(atoms), self.j.get_stress(atoms))
+        self.assertAllClose(self.a.get_stress(atoms), self.j_stress.get_stress(atoms))
 
     def test_solid_noncubic(self):
         from ase.build import bulk
@@ -56,9 +57,9 @@ class TestLennardJonesAgainstASE(TestCase, AllClose):
         atoms.set_cell(1.05 * atoms.get_cell(), scale_atoms=True)
 
         self.assertAllClose(
-            self.a.get_potential_energy(atoms), self.j.get_potential_energy(atoms)
+            self.a.get_potential_energy(atoms), self.j_stress.get_potential_energy(atoms)
         )
         self.assertAllClose(
-            self.a.get_forces(atoms), self.j.get_forces(atoms), atol=1e-14
+            self.a.get_forces(atoms), self.j_stress.get_forces(atoms), atol=1e-14
         )
-        self.assertAllClose(self.a.get_stress(atoms), self.j.get_stress(atoms))
+        self.assertAllClose(self.a.get_stress(atoms), self.j_stress.get_stress(atoms))
