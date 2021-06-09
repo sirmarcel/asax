@@ -19,32 +19,6 @@ class TestState(TestCase):
         self.atoms4 = self.atoms3.copy()
         self.atoms4.set_pbc(False)
 
-    def test_on_atoms_changed(self):
-        calculator = LennardJones()
-        calculator.on_atoms_changed = MagicMock()
-
-        calculator.update(self.atoms1)
-        calculator.on_atoms_changed.assert_called_once()
-
-        calculator.on_atoms_changed.reset_mock()
-        calculator.update(self.atoms1)
-        calculator.on_atoms_changed.assert_not_called()
-        calculator.update(self.atoms2)
-        calculator.on_atoms_changed.assert_called_once()
-
-
-    def test_pbc_changed(self):
-        calculator = LennardJones()
-        calculator.on_atoms_changed = MagicMock()
-
-        calculator.update(self.atoms1)
-        calculator.on_atoms_changed.assert_called_once()
-
-        calculator.on_atoms_changed.reset_mock()
-        calculator.update(self.atoms3)
-        calculator.on_atoms_changed.assert_called_once()
-
-
     def test_setup(self):
         calculator = LennardJones()
         calculator.setup = MagicMock()

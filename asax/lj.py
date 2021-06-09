@@ -28,7 +28,7 @@ class LennardJones(Calculator):
             ro: Onset of the cutoff function. Set to 0.8*rc if None, the default.
             stress: Compute stress tensor (periodic systems only)
         """
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, stress=stress)
         self.epsilon = epsilon
         self.sigma = sigma
 
@@ -39,17 +39,6 @@ class LennardJones(Calculator):
         if ro is None:
             ro = 0.8 * self.rc
         self.ro = ro
-        self.stress = stress
-
-    def on_atoms_changed(self, atoms):
-        if self._neighbors is not None and self.atoms is not None:
-            if len(self.atoms.get_positions()) != len(atoms.get_positions()):
-                # number of atoms changed, redo neighborlist
-                self._neighbors = None
-
-        # non-PBC atom passed - disable stress computation
-        if not all(atoms.get_pbc()) and self.stress:
-            self.stress = False
 
     def get_potential(self):
         # box as vanilla np.array causes strange indexing errors with neighbor lists now and then
@@ -57,17 +46,16 @@ class LennardJones(Calculator):
         normalized_ro = self.ro / self.sigma
         normalized_rc = self.rc / self.sigma
 
-        if self._neighbors is None:
-            self._neighbor_fn, self._energy_fn = energy.lennard_jones_neighbor_list(
-                self.displacement,
-                box,
-                sigma=jnp.array(self.sigma),
-                epsilon=jnp.array(self.epsilon),
-                r_onset=normalized_ro,
-                r_cutoff=normalized_rc,
-                per_particle=True,
-            )
-            self._neighbors = self._neighbor_fn(self.R)
+        self._neighbor_fn, self._energy_fn = energy.lennard_jones_neighbor_list(
+            self.displacement,
+            box,
+            sigma=jnp.array(self.sigma),
+            epsilon=jnp.array(self.epsilon),
+            r_onset=normalized_ro,
+            r_cutoff=normalized_rc,
+            per_particle=True,
+        )
+        self._neighbors = self._neighbor_fn(self.R)
 
         if self.stress:
             return jit(

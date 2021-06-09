@@ -17,43 +17,29 @@ class Calculator(GetPropertiesMixin, ABC):
     shift: space.ShiftFn
     potential: jax_utils.PotentialFn
 
-    def __init__(self, x64=True):
+    def __init__(self, x64=True, stress=False):
         self.x64 = x64
         config.update("jax_enable_x64", self.x64)
 
         self.atoms: Atoms = None
         self.results = {}
+        self.stress = stress
 
     def update(self, atoms: Atoms):
         if atoms is None and self.atoms is None:
             raise RuntimeError("Need an Atoms object to do anything!")
 
-        if self.atoms is None:
-            # new or reset calculator: redo everything
-            self.on_atoms_changed(atoms)
-            self.atoms = atoms.copy()  # avoid missing changes
-            self.results = {}
-            self.setup()
-            return
-
         changes = compare_atoms(self.atoms, atoms)
+
         if changes:
-            # any change invalidates results
             self.results = {}
-
-            if "cell" in changes or "pbc" in changes:
-                # need to recreate displacement; might as well start over
-                self.atoms = None
-                self.update(atoms)
-
-            # no major changes, let subclass deal with it
-            self.on_atoms_changed(atoms)
             self.atoms = atoms.copy()
 
-    @abstractmethod
-    def on_atoms_changed(self, atoms: Atoms):
-        """Called whenever a new atoms object is passed so that child classes can react"""
-        pass
+            if self.need_setup(changes):
+                self.setup()
+
+    def need_setup(self, changes):
+        return "cell" in changes or "pbc" in changes or "numbers" in changes
 
     def setup(self):
         """Create displacement, shift and potential"""
