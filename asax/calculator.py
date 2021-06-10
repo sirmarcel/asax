@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Callable
 
 import numpy as np
 from ase.stress import full_3x3_to_voigt_6_stress
@@ -13,7 +13,7 @@ from ase.calculators.calculator import compare_atoms, PropertyNotImplementedErro
 from jax_md.energy import NeighborFn
 
 from asax import jax_utils
-from asax.jax_utils import EnergyFn
+from asax.jax_utils import EnergyFn, PotentialFn
 
 
 class Calculator(GetPropertiesMixin, ABC):
@@ -33,6 +33,15 @@ class Calculator(GetPropertiesMixin, ABC):
         self.atoms: Atoms = None
         self.results = {}
         self.stress = stress
+
+    @property
+    def R(self) -> jnp.array:
+        return jnp.float64(self.atoms.get_positions())
+
+    @property
+    def box(self) -> jnp.array:
+        # box as vanilla np.array causes strange indexing errors with neighbor lists now and
+        return jnp.float64(self.atoms.get_cell().array)
 
     def update(self, atoms: Atoms):
         if atoms is None and self.atoms is None:
@@ -56,28 +65,16 @@ class Calculator(GetPropertiesMixin, ABC):
         self.potential = self.get_potential()
 
     def get_displacement(self, atoms: Atoms):
-        # TODO: jit
-
         if not all(atoms.get_pbc()):
             return space.free()
 
-        box = atoms.get_cell().array
-        return space.periodic_general(box, fractional_coordinates=False)
-
-    @property
-    def R(self) -> jnp.array:
-        return self.atoms.get_positions()
-
-    @property
-    def box(self):
-        # box as vanilla np.array causes strange indexing errors with neighbor lists now and then
-        return self.atoms.get_cell().array
+        return space.periodic_general(self.box, fractional_coordinates=False)
 
     @abstractmethod
     def get_energy_function(self) -> Tuple[NeighborFn, EnergyFn]:
         pass
 
-    def get_potential(self):
+    def get_potential(self) -> PotentialFn:
         self.neighbor_fn, energy_fn = self.get_energy_function()
         self.update_neighbor_list()
 
