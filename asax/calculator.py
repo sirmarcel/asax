@@ -2,12 +2,18 @@ from abc import ABC, abstractmethod
 from typing import Dict, Tuple
 
 import numpy as np
+from ase.stress import full_3x3_to_voigt_6_stress
+from jax import jit
+import jax.numpy as jnp
 from jax.config import config
-from jax_md import space
+from jax_md import space, energy, partition
 from ase.atoms import Atoms
 from ase.calculators.abc import GetPropertiesMixin
 from ase.calculators.calculator import compare_atoms, PropertyNotImplementedError
-from asax import utils, jax_utils
+from jax_md.energy import NeighborFn
+
+from asax import jax_utils
+from asax.jax_utils import EnergyFn
 
 
 class Calculator(GetPropertiesMixin, ABC):
@@ -16,6 +22,9 @@ class Calculator(GetPropertiesMixin, ABC):
     displacement: space.DisplacementFn
     shift: space.ShiftFn
     potential: jax_utils.PotentialFn
+
+    neighbor_fn: energy.NeighborFn
+    neighbors: partition.NeighborList
 
     def __init__(self, x64=True, stress=False):
         self.x64 = x64
@@ -47,6 +56,8 @@ class Calculator(GetPropertiesMixin, ABC):
         self.potential = self.get_potential()
 
     def get_displacement(self, atoms: Atoms):
+        # TODO: jit
+
         if not all(atoms.get_pbc()):
             return space.free()
 
@@ -54,27 +65,65 @@ class Calculator(GetPropertiesMixin, ABC):
         return space.periodic_general(box, fractional_coordinates=False)
 
     @property
-    def R(self):
+    def R(self) -> jnp.array:
         return self.atoms.get_positions()
 
     @property
     def box(self):
+        # box as vanilla np.array causes strange indexing errors with neighbor lists now and then
         return self.atoms.get_cell().array
 
     @abstractmethod
-    def get_potential(self):
+    def get_energy_function(self) -> Tuple[NeighborFn, EnergyFn]:
         pass
 
-    @abstractmethod
+    def get_potential(self):
+        self.neighbor_fn, energy_fn = self.get_energy_function()
+        self.update_neighbor_list()
+
+        if self.stress:
+            return jit(
+                jax_utils.strained_neighbor_list_potential(
+                    energy_fn, self.neighbors, self.box
+                )
+            )
+
+        return jit(
+            jax_utils.unstrained_neighbor_list_potential(
+                energy_fn, self.neighbors
+            )
+        )
+
+    def update_neighbor_list(self):
+        self.neighbors = self.neighbor_fn(self.R)
+
     def compute_properties(self) -> Dict:
-        """Expected to return a dictionary keyed on (a subset of) implemented_properties"""
-        pass
+        if self.neighbors.did_buffer_overflow:
+            self.update_neighbor_list()
+
+        properties = self.potential(self.R)
+        (
+            potential_energy,
+            potential_energies,
+            forces,
+            stress,
+        ) = jax_utils.block_and_dispatch(properties)
+
+        result = {
+            "energy": potential_energy,
+            "energies": potential_energies,
+            "forces": forces,
+        }
+
+        if stress is not None:
+            result["stress"] = full_3x3_to_voigt_6_stress(stress)
+        return result
+
+    # ase plumbing
 
     def calculate(self, atoms=None, **kwargs):
         self.update(atoms)
         self.results = self.compute_properties()
-
-    # ase plumbing
 
     def get_property(self, name, atoms=None, allow_calculation=True):
         if name not in self.implemented_properties:

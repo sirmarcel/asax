@@ -1,4 +1,7 @@
-from typing import Dict, List
+from typing import Dict, List, Tuple
+
+from jax_md.energy import NeighborFn
+
 from .calculator import Calculator
 import numpy as np
 from asax import jax_utils
@@ -7,15 +10,13 @@ import jax.numpy as jnp
 from jax_md import energy, partition
 from ase.constraints import full_3x3_to_voigt_6_stress
 
+from .jax_utils import EnergyFn
+
 
 class LennardJones(Calculator):
     """Lennard-Jones Potential"""
 
     implemented_properties = ["energy", "energies", "forces", "stress"]
-
-    _energy_fn: jax_utils.EnergyFn = None
-    _neighbor_fn: energy.NeighborFn = None
-    _neighbors: partition.NeighborList = None
 
     def __init__(
         self, epsilon=1.0, sigma=1.0, rc=None, ro=None, stress=False, **kwargs
@@ -40,51 +41,16 @@ class LennardJones(Calculator):
             ro = 0.8 * self.rc
         self.ro = ro
 
-    def get_potential(self):
-        # box as vanilla np.array causes strange indexing errors with neighbor lists now and then
-        box = jnp.array(self.box)
+    def get_energy_function(self) -> Tuple[NeighborFn, EnergyFn]:
         normalized_ro = self.ro / self.sigma
         normalized_rc = self.rc / self.sigma
 
-        self._neighbor_fn, self._energy_fn = energy.lennard_jones_neighbor_list(
+        return energy.lennard_jones_neighbor_list(
             self.displacement,
-            box,
+            self.box,
             sigma=jnp.array(self.sigma),
             epsilon=jnp.array(self.epsilon),
             r_onset=normalized_ro,
             r_cutoff=normalized_rc,
             per_particle=True,
         )
-        self._neighbors = self._neighbor_fn(self.R)
-
-        if self.stress:
-            return jit(
-                jax_utils.strained_neighbor_list_potential(
-                    self._energy_fn, self._neighbors, box
-                )
-            )
-
-        return jit(
-            jax_utils.unstrained_neighbor_list_potential(
-                self._energy_fn, self._neighbors
-            )
-        )
-
-    def compute_properties(self) -> Dict:
-        properties = self.potential(self.R)
-        (
-            potential_energy,
-            potential_energies,
-            forces,
-            stress,
-        ) = jax_utils.block_and_dispatch(properties)
-
-        result = {
-            "energy": potential_energy,
-            "energies": potential_energies,
-            "forces": forces,
-        }
-
-        if stress is not None:
-            result["stress"] = full_3x3_to_voigt_6_stress(stress)
-        return result
