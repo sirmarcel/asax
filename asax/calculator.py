@@ -1,13 +1,19 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Callable
 
 import numpy as np
+from ase.stress import full_3x3_to_voigt_6_stress
+from jax import jit
+import jax.numpy as jnp
 from jax.config import config
-from jax_md import space
+from jax_md import space, energy, partition
 from ase.atoms import Atoms
 from ase.calculators.abc import GetPropertiesMixin
 from ase.calculators.calculator import compare_atoms, PropertyNotImplementedError
-from asax import utils, jax_utils
+from jax_md.energy import NeighborFn
+
+from asax import jax_utils
+from asax.jax_utils import EnergyFn, PotentialFn
 
 
 class Calculator(GetPropertiesMixin, ABC):
@@ -17,58 +23,44 @@ class Calculator(GetPropertiesMixin, ABC):
     shift: space.ShiftFn
     potential: jax_utils.PotentialFn
 
-    def __init__(self, x64=True):
+    neighbor_fn: energy.NeighborFn
+    neighbors: partition.NeighborList
+
+    def __init__(self, x64=True, stress=False):
         self.x64 = x64
         config.update("jax_enable_x64", self.x64)
 
         self.atoms: Atoms = None
         self.results = {}
+        self.stress = stress
+
+    @property
+    def R(self) -> jnp.array:
+        return jnp.float64(self.atoms.get_positions())
+
+    @property
+    def box(self) -> jnp.array:
+        # box as vanilla np.array causes strange indexing errors with neighbor lists now and
+        return jnp.float64(self.atoms.get_cell().array)
 
     def update(self, atoms: Atoms):
         if atoms is None and self.atoms is None:
             raise RuntimeError("Need an Atoms object to do anything!")
 
-        if self.atoms is None:
-            self.atoms = atoms.copy()
-            self.results = {}
-            self.on_atoms_changed()
-            self.setup()
-            return
-
         changes = compare_atoms(self.atoms, atoms)
-        if not changes:
-            return
 
-        # cache not empty and we got a new atom that has changes
-        # => clear results, clear cache, re-run update function to write new atom to cache
-        self.results = {}
-        if "cell" in changes:
-            # TODO: Does this include switches from bulk to molecules?
-            # => displacement only requires re-initialization if this is the case
-            self.atoms = None
-            self.update(atoms)
-            return
+        if changes:
+            self.results = {}
+            self.atoms = atoms.copy()
 
-        if "positions" in changes:
-            self.results = self.compute_properties()
-            return
+            if self.need_setup(changes):
+                self.setup()
 
-        # TODO: Detect changes in atom count/shape
-        # => potential only requires re-initialization if this is the case
-
-        # there are changes, but not within the cell.
-        # => clear results, but write directly to the cache without copying.
-        # TODO: why this?
-        self.atoms = atoms
-        self.on_atoms_changed()
-        self.setup()
-
-    @abstractmethod
-    def on_atoms_changed(self):
-        """Called whenever a new atoms object is passed so that child classes can react accordingly."""
-        pass
+    def need_setup(self, changes):
+        return "cell" in changes or "pbc" in changes or "numbers" in changes
 
     def setup(self):
+        """Create displacement, shift and potential"""
         self.displacement, self.shift = self.get_displacement(self.atoms)
         self.potential = self.get_potential()
 
@@ -76,31 +68,59 @@ class Calculator(GetPropertiesMixin, ABC):
         if not all(atoms.get_pbc()):
             return space.free()
 
-        box = atoms.get_cell().array
-        return space.periodic_general(box, fractional_coordinates=False)
-
-    @property
-    def R(self):
-        return self.atoms.get_positions()
-
-    @property
-    def box(self):
-        return self.atoms.get_cell().array
+        return space.periodic_general(self.box, fractional_coordinates=False)
 
     @abstractmethod
-    def get_potential(self):
+    def get_energy_function(self) -> Tuple[NeighborFn, EnergyFn]:
         pass
 
-    @abstractmethod
+    def get_potential(self) -> PotentialFn:
+        self.neighbor_fn, energy_fn = self.get_energy_function()
+        self.update_neighbor_list()
+
+        if self.stress:
+            return jit(
+                jax_utils.strained_neighbor_list_potential(
+                    energy_fn, self.neighbors, self.box
+                )
+            )
+
+        return jit(
+            jax_utils.unstrained_neighbor_list_potential(
+                energy_fn, self.neighbors
+            )
+        )
+
+    def update_neighbor_list(self):
+        self.neighbors = self.neighbor_fn(self.R)
+
     def compute_properties(self) -> Dict:
-        """Expected to return a dictionary keyed on (a subset of) implemented_properties"""
-        pass
+        if self.neighbors.did_buffer_overflow:
+            self.update_neighbor_list()
+
+        properties = self.potential(self.R)
+        (
+            potential_energy,
+            potential_energies,
+            forces,
+            stress,
+        ) = jax_utils.block_and_dispatch(properties)
+
+        result = {
+            "energy": potential_energy,
+            "energies": potential_energies,
+            "forces": forces,
+        }
+
+        if stress is not None:
+            result["stress"] = full_3x3_to_voigt_6_stress(stress)
+        return result
+
+    # ase plumbing
 
     def calculate(self, atoms=None, **kwargs):
         self.update(atoms)
         self.results = self.compute_properties()
-
-    # ase plumbing
 
     def get_property(self, name, atoms=None, allow_calculation=True):
         if name not in self.implemented_properties:
@@ -116,9 +136,7 @@ class Calculator(GetPropertiesMixin, ABC):
         if name not in self.results:
             # For some reason the calculator was not able to do what we want,
             # and that is OK.
-            raise PropertyNotImplementedError(
-                f"{name} property not present in results!"
-            )
+            raise PropertyNotImplementedError(f"{name} property not present in results!")
 
         result = self.results[name]
         if isinstance(result, np.ndarray):
