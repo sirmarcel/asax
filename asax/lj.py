@@ -9,6 +9,7 @@ from jax import jit
 import jax.numpy as jnp
 from jax_md import energy, partition
 from ase.constraints import full_3x3_to_voigt_6_stress
+from ase import units
 
 from .jax_utils import EnergyFn
 
@@ -19,7 +20,7 @@ class LennardJones(Calculator):
     implemented_properties = ["energy", "energies", "forces", "stress"]
 
     def __init__(
-        self, epsilon=1.0, sigma=1.0, rc=None, ro=None, stress=False, **kwargs
+        self, epsilon=1.0, sigma=1.0, rc=None, ro=None, stress=False, dr_threshold=1 * units.Angstrom, **kwargs
     ):
         """
         Parameters:
@@ -40,6 +41,7 @@ class LennardJones(Calculator):
         if ro is None:
             ro = 0.8 * self.rc
         self.ro = ro
+        self.dr_threshold = dr_threshold
 
     def get_energy_function(self) -> Tuple[NeighborFn, EnergyFn]:
         normalized_ro = self.ro / self.sigma
@@ -53,4 +55,5 @@ class LennardJones(Calculator):
             r_onset=normalized_ro,
             r_cutoff=normalized_rc,
             per_particle=True,
+            dr_threshold=self.dr_threshold
         )
