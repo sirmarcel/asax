@@ -50,10 +50,10 @@ class LennardJones(Calculator):
         return energy.lennard_jones_neighbor_list(
             self.displacement,
             self.box,
-            sigma=jnp.array(self.sigma),
-            epsilon=jnp.array(self.epsilon),
-            r_onset=normalized_ro,
-            r_cutoff=normalized_rc,
+            sigma=jnp.float32(self.sigma),
+            epsilon=jnp.float32(self.epsilon),
+            r_onset=jnp.float32(normalized_ro),
+            r_cutoff=jnp.float32(normalized_rc),
             per_particle=True,
             dr_threshold=self.dr_threshold
         )

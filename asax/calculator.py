@@ -36,12 +36,12 @@ class Calculator(GetPropertiesMixin, ABC):
 
     @property
     def R(self) -> jnp.array:
-        return jnp.float64(self.atoms.get_positions())
+        return jnp.float32(self.atoms.get_positions())
 
     @property
     def box(self) -> jnp.array:
         # box as vanilla np.array causes strange indexing errors with neighbor lists now and
-        return jnp.float64(self.atoms.get_cell().array)
+        return jnp.float32(self.atoms.get_cell().array)
 
     def update(self, atoms: Atoms):
         if atoms is None and self.atoms is None:
