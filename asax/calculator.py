@@ -36,7 +36,7 @@ class Calculator(GetPropertiesMixin, ABC):
 
     @property
     def R(self) -> jnp.array:
-        return jnp.float32(self.atoms.get_positions())
+        return jnp.float32(self.atoms.get_positions(wrap=True))
 
     @property
     def box(self) -> jnp.array:

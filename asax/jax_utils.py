@@ -1,18 +1,10 @@
-from typing import Callable, Tuple, Any, Union, List
-import warnings
-from ase.build import bulk
-from ase.md.velocitydistribution import MaxwellBoltzmannDistribution, Stationary
+from typing import Callable, Tuple
+
 import jax.numpy as jnp
 import numpy as np
-from ase import Atoms
-from ase.calculators.lj import LennardJones as aLJ
 from jax import grad
-from jax_md import space, energy, quantity, util
-from jax_md.energy import DisplacementFn
-from jax_md.simulate import NVEState
-from jax_md.space import ShiftFn
+from jax_md import space, energy, quantity
 from jaxlib.xla_extension import DeviceArray
-from numpy import ndarray
 
 EnergyFn = Callable[[space.Array, energy.NeighborList], space.Array]
 PotentialFn = Callable[
@@ -78,14 +70,6 @@ def unstrained_neighbor_list_potential(energy_fn, neighbors) -> PotentialFn:
     return potential
 
 
-def get_initial_nve_state(atoms: Atoms) -> NVEState:
-    R = atoms.get_positions()
-    V = atoms.get_velocities()  # å/ ase fs
-    forces = atoms.get_forces()
-    masses = atoms.get_masses()[0]
-    return NVEState(R, V, forces, masses)
-
-
 def block_and_dispatch(properties: Tuple[DeviceArray, ...]):
     for p in properties:
         if p is None:
@@ -94,12 +78,3 @@ def block_and_dispatch(properties: Tuple[DeviceArray, ...]):
         p.block_until_ready()
 
     return [None if p is None else np.array(p) for p in properties]
-
-
-def initialize_cubic_argon(multiplier: List[int] = 5, temperature_K: int = 30):
-    atoms = bulk("Ar", cubic=True) * [multiplier, multiplier, multiplier]
-    MaxwellBoltzmannDistribution(atoms, temperature_K=temperature_K)
-    Stationary(atoms)
-
-    atoms.calc = aLJ(sigma=2.0, epsilon=1.5, rc=10.0, ro=6.0)  # TODO: Remove later
-    return atoms
