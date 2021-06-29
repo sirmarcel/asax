@@ -80,15 +80,11 @@ class Calculator(GetPropertiesMixin, ABC):
 
         if self.stress:
             return jit(
-                jax_utils.strained_neighbor_list_potential(
-                    energy_fn, self.neighbors, self.box
-                )
+                jax_utils.strained_neighbor_list_potential(energy_fn, self.box)
             )
 
         return jit(
-            jax_utils.unstrained_neighbor_list_potential(
-                energy_fn, self.neighbors
-            )
+            jax_utils.unstrained_neighbor_list_potential(energy_fn)
         )
 
     def update_neighbor_list(self):
@@ -98,7 +94,7 @@ class Calculator(GetPropertiesMixin, ABC):
         if self.neighbors.did_buffer_overflow:
             self.update_neighbor_list()
 
-        properties = self.potential(self.R)
+        properties = self.potential(self.R, neighbor=self.neighbors)
         (
             potential_energy,
             potential_energies,

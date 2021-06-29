@@ -1,6 +1,8 @@
 from unittest import TestCase
 from ase.calculators.lj import LennardJones as aLJ
-from ase import Atoms
+from ase import Atoms, units
+from ase.md import VelocityVerlet
+
 from asax.lj import LennardJones as jLJ
 from allclose import AllClose
 from ase.calculators.calculator import PropertyNotImplementedError
@@ -76,3 +78,41 @@ class TestLennardJonesAgainstASE(TestCase, AllClose):
             self.a.get_forces(atoms), self.j.get_forces(atoms), atol=1e-14
         )
         self.assertAllClose(self.a.get_stress(atoms), self.j_stress.get_stress(atoms))
+
+
+class TestLennardJonesMd(TestCase, AllClose):
+
+    dt = 5 * units.fs
+    dr_threshold = 1 * units.Angstrom
+
+    # sigma = 2.0
+    # epsilon = 1.5
+    # rc = 10.0
+    # ro = 6.0
+
+    sigma = 3.40
+    epsilon = 0.01042
+    rc = 10.54
+    ro = 6.0
+
+    def test_nve_against_ase(self):
+        from ase.build import bulk
+
+        ase_atoms = bulk("Ar", cubic=True) * [8, 8, 8]
+        ase_atoms.calc = aLJ(epsilon=self.epsilon, sigma=self.sigma, rc=self.rc, ro=self.ro, smooth=True)
+        ase_dyn = VelocityVerlet(ase_atoms, timestep=self.dt)
+
+        asax_atoms = bulk("Ar", cubic=True) * [8, 8, 8]
+        asax_atoms.calc = jLJ(epsilon=self.epsilon, sigma=self.sigma, rc=self.rc, ro=self.ro, x64=True)
+        asax_dyn = VelocityVerlet(asax_atoms, timestep=self.dt)
+
+        for i in range(10):
+            ase_dyn.run(steps=1)
+            asax_dyn.run(steps=1)
+
+            self.assertAllClose(
+                ase_atoms.get_positions(wrap=True),
+                asax_atoms.get_positions(wrap=True),
+                atol=1e-8,
+                equal_nan=False
+            )
