@@ -1,16 +1,11 @@
-from typing import Dict, List, Tuple
+from typing import Tuple
 
+import jax.numpy as jnp
+from ase import units
+from jax_md import energy
 from jax_md.energy import NeighborFn
 
 from .calculator import Calculator
-import numpy as np
-from asax import jax_utils
-from jax import jit
-import jax.numpy as jnp
-from jax_md import energy, partition
-from ase.constraints import full_3x3_to_voigt_6_stress
-from ase import units
-
 from .jax_utils import EnergyFn
 
 
@@ -20,7 +15,14 @@ class LennardJones(Calculator):
     implemented_properties = ["energy", "energies", "forces", "stress"]
 
     def __init__(
-        self, epsilon=1.0, sigma=1.0, rc=None, ro=None, stress=False, dr_threshold=1 * units.Angstrom, **kwargs
+        self,
+        epsilon=1.0,
+        sigma=1.0,
+        rc=None,
+        ro=None,
+        stress=False,
+        dr_threshold=1 * units.Angstrom,
+        **kwargs
     ):
         """
         Parameters:
@@ -50,10 +52,10 @@ class LennardJones(Calculator):
         return energy.lennard_jones_neighbor_list(
             self.displacement,
             self.box,
-            sigma=jnp.float32(self.sigma),
-            epsilon=jnp.float32(self.epsilon),
-            r_onset=jnp.float32(normalized_ro),
-            r_cutoff=jnp.float32(normalized_rc),
+            sigma=jnp.array(self.sigma, dtype=self.global_dtype),
+            epsilon=jnp.array(self.epsilon, dtype=self.global_dtype),
+            r_onset=jnp.array(normalized_ro, dtype=self.global_dtype),
+            r_cutoff=jnp.array(normalized_rc, dtype=self.global_dtype),
             per_particle=True,
-            dr_threshold=self.dr_threshold
+            dr_threshold=self.dr_threshold,
         )

@@ -17,6 +17,7 @@ from asax.jax_utils import EnergyFn, PotentialFn
 
 
 class Calculator(GetPropertiesMixin, ABC):
+    global_dtype = "float32"
     implemented_properties = ["energy", "forces"]
 
     displacement: space.DisplacementFn
@@ -36,12 +37,11 @@ class Calculator(GetPropertiesMixin, ABC):
 
     @property
     def R(self) -> jnp.array:
-        return jnp.float32(self.atoms.get_positions(wrap=True))
+        return jnp.array(self.atoms.get_positions(wrap=True), dtype=self.global_dtype)
 
     @property
     def box(self) -> jnp.array:
-        # box as vanilla np.array causes strange indexing errors with neighbor lists now and
-        return jnp.float32(self.atoms.get_cell().array)
+        return jnp.array(self.atoms.get_cell().array, self.global_dtype)
 
     def update(self, atoms: Atoms):
         if atoms is None and self.atoms is None:
@@ -80,12 +80,12 @@ class Calculator(GetPropertiesMixin, ABC):
 
         if self.stress:
             return jit(
-                jax_utils.strained_neighbor_list_potential(energy_fn, self.box)
+                jax_utils.strained_neighbor_list_potential(
+                    energy_fn, self.box, self.global_dtype
+                )
             )
 
-        return jit(
-            jax_utils.unstrained_neighbor_list_potential(energy_fn)
-        )
+        return jit(jax_utils.unstrained_neighbor_list_potential(energy_fn))
 
     def update_neighbor_list(self):
         self.neighbors = self.neighbor_fn(self.R)
@@ -132,7 +132,9 @@ class Calculator(GetPropertiesMixin, ABC):
         if name not in self.results:
             # For some reason the calculator was not able to do what we want,
             # and that is OK.
-            raise PropertyNotImplementedError(f"{name} property not present in results!")
+            raise PropertyNotImplementedError(
+                f"{name} property not present in results!"
+            )
 
         result = self.results[name]
         if isinstance(result, np.ndarray):
