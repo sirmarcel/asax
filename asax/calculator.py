@@ -88,7 +88,8 @@ class Calculator(GetPropertiesMixin, ABC):
         return jit(jax_utils.unstrained_neighbor_list_potential(energy_fn))
 
     def update_neighbor_list(self):
-        self.neighbors = self.neighbor_fn(self.R)
+        # self.neighbors = self.neighbor_fn(self.R)
+        self.neighbors = self.neighbor_fn.allocate(self.R)
 
     def compute_properties(self) -> Dict:
         if self.neighbors.did_buffer_overflow:

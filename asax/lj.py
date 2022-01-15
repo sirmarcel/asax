@@ -4,6 +4,7 @@ import jax.numpy as jnp
 from ase import units
 from jax_md import energy
 from jax_md.energy import NeighborFn
+from jax_md.partition import NeighborListFormat
 
 from .calculator import Calculator
 from .jax_utils import EnergyFn
@@ -58,4 +59,5 @@ class LennardJones(Calculator):
             r_cutoff=jnp.array(normalized_rc, dtype=self.global_dtype),
             per_particle=True,
             dr_threshold=self.dr_threshold,
+            format=NeighborListFormat.Dense
         )
